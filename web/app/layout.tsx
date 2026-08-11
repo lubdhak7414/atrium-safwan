@@ -1,5 +1,22 @@
 import type { Metadata } from 'next';
+import { Archivo, IBM_Plex_Mono } from 'next/font/google';
 import './globals.css';
+import { CurrentUserProvider } from '../components/CurrentUserProvider';
+import { RoleNav } from '../components/RoleNav';
+
+const archivo = Archivo({
+  subsets: ['latin'],
+  weight: ['400', '500', '600', '700'],
+  display: 'swap',
+  variable: '--font-archivo'
+});
+
+const plexMono = IBM_Plex_Mono({
+  subsets: ['latin'],
+  weight: ['400', '500'],
+  display: 'swap',
+  variable: '--font-plex-mono'
+});
 
 export const metadata: Metadata = {
   title: 'Atrium'
@@ -7,15 +24,12 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en" className={`${archivo.variable} ${plexMono.variable}`}>
       <body>
-        <nav>
-          <a href="/">Sessions</a>
-          <a href="/admin">Dashboard</a>
-          <a href="/admin/sessions">Calendar</a>
-          <a href="/login">Log in</a>
-        </nav>
-        {children}
+        <CurrentUserProvider>
+          <RoleNav />
+          {children}
+        </CurrentUserProvider>
       </body>
     </html>
   );
