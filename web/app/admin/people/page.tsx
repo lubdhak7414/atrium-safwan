@@ -82,7 +82,8 @@ function PeopleWorkspace() {
           </div>
           {error && <p className="error-line" role="alert">{error}</p>}
           {message && <p className="success-line" role="status">{message}</p>}
-          <div className="table-scroll">
+          {people.length === 0 && <p className="state-line">No people records are available.</p>}
+          {people.length > 0 && <div className="table-scroll">
             <table>
               <thead><tr><th>ID</th><th>NAME</th><th>EMAIL</th><th>ROLE</th><th>CREDITS</th><th>ACTIVE</th><th>ACTIONS</th></tr></thead>
               <tbody>{people.map((person) => {
@@ -105,7 +106,7 @@ function PeopleWorkspace() {
                 );
               })}</tbody>
             </table>
-          </div>
+          </div>}
         </section>
       )}
     </main>

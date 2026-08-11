@@ -1,6 +1,8 @@
 import { PoolClient } from 'pg';
+import crypto from 'node:crypto';
 import { Caller } from './permissions';
 import { withTransaction } from './db';
+import { createSetupTokenForClient, hashPassword } from './auth';
 import {
   hoursOfNotice,
   participantRefundPercent,
@@ -10,6 +12,7 @@ import {
   seatFee
 } from './credits';
 import { formatCentreDateTime, parseLocalSessionWindow } from './time';
+import { INITIAL_CREDITS } from './credits';
 
 export class DomainError extends Error {
   constructor(public readonly status: number, message: string) {
@@ -353,6 +356,97 @@ Session starts: ${formatCentreDateTime(session.starts_at)}`
   });
 }
 
+export type AnonymousBookingInput = {
+  sessionId: number;
+  email: string;
+  fullName: string;
+};
+
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+export async function enrolAnonymous(input: AnonymousBookingInput): Promise<{ status: 'received' }> {
+  const email = input.email.trim().toLowerCase();
+  const fullName = input.fullName.trim();
+  if (!EMAIL_PATTERN.test(email) || email.length > 254 || !fullName || fullName.length > 120) {
+    badRequest('a valid email and full name are required');
+  }
+
+  try {
+    return await withTransaction(async (client) => {
+      const session = await lockSessionWithRoomless(client, input.sessionId);
+      const now = await databaseNow(client);
+      if (session.status !== 'scheduled') conflict('only scheduled sessions may be booked');
+      if (new Date(session.starts_at).getTime() <= now.getTime()) conflict('a session that has started cannot be booked');
+
+      // Hash before the existence check so both paths pay the password-work cost.
+      const randomPassword = crypto.randomBytes(32).toString('base64url');
+      const passwordHash = await hashPassword(randomPassword);
+      const existing = await client.query('select id from person where lower(email) = lower($1) for update', [email]);
+      if (existing.rowCount !== 0) {
+        // Do not disclose whether an account exists or issue a token from an email alone.
+        return { status: 'received' as const };
+      }
+
+      const participant = await client.query(
+        `insert into person (email, password_hash, full_name, kind, credits, active, created_at)
+         values ($1, $2, $3, 'participant', $4, true, now())
+         returning id, full_name, email`,
+        [email, passwordHash, fullName, INITIAL_CREDITS.participant]
+      );
+      const personId = Number(participant.rows[0].id);
+
+      const rooms = await client.query('select capacity from room where id = $1', [session.room_id]);
+      if (rooms.rowCount === 0) badRequest('no such room');
+      const count = await activeParticipantCount(client, input.sessionId, session.coach_id);
+      if (count >= Number(rooms.rows[0].capacity)) conflict('that session is full');
+      await checkCommitments(client, [personId], iso(session.starts_at), iso(session.ends_at), [input.sessionId]);
+
+      const debited = await client.query(
+        'update person set credits = credits - $1 where id = $2 and credits >= $1 returning id',
+        [session.seat_fee_credits, personId]
+      );
+      if (debited.rowCount !== 1) conflict('you do not have enough credits');
+      const inserted = await client.query(
+        `insert into enrolment (session_id, person_id, status, credits_charged, credits_refunded, enrolled_at)
+         values ($1, $2, 'active', $3, 0, now()) returning id`,
+        [input.sessionId, personId, session.seat_fee_credits]
+      );
+      const setup = await createSetupTokenForClient(client, personId);
+      const webBase = process.env.WEB_BASE_URL || 'http://localhost:3000';
+      await enqueueEmail(
+        client,
+        `account-setup:${personId}`,
+        'participant.account_setup',
+        email,
+        'Finish setting up your Atrium account',
+        `Your Atrium booking is confirmed for ${session.discipline} on ${formatCentreDateTime(session.starts_at)}.
+
+Set your password here within 30 minutes:
+${webBase}/setup-password?token=${encodeURIComponent(setup.token)}
+
+Booking reference: ${inserted.rows[0].id}`
+      );
+      const coach = await client.query('select email from person where id = $1', [session.coach_id]);
+      if (coach.rowCount === 1) {
+        await enqueueEmail(
+          client,
+          `booking-created:${inserted.rows[0].id}`,
+          'participant.booking.created',
+          coach.rows[0].email,
+          'New booking for your session',
+          `${fullName} has booked a place in your ${session.discipline} session.
+
+Session starts: ${formatCentreDateTime(session.starts_at)}`
+        );
+      }
+      return { status: 'received' as const };
+    });
+  } catch (error) {
+    if (databaseErrorCode(error) === '23505') return { status: 'received' as const };
+    throw error;
+  }
+}
+
 async function lockSessionWithRoomless(client: PoolClient, id: number): Promise<any> {
   const rows = await client.query('select * from session where id = $1 for update', [id]);
   if (rows.rowCount === 0) notFound('no such session');
@@ -640,7 +734,7 @@ Session: ${session.discipline}
 New time: ${formatCentreDateTime(updated.rows[0].starts_at)}
 Room: ${room.name}
 
-Please review your schedule in the Atrium app.`
+Please review your schedule in the Atrium website.`
     );
     return updated.rows[0];
   });
@@ -719,7 +813,7 @@ It was scheduled for ${formatCentreDateTime(session.starts_at)}. If you have any
 
 Time: ${formatCentreDateTime(session.starts_at)}
 
-Please review your schedule in the Atrium app.`
+Please review your schedule in the Atrium website.`
       );
     }
     return updated.rows[0];

@@ -155,7 +155,8 @@ export async function optionalSession(req: Request, res: Response, next: NextFun
 export async function login(req: Request, res: Response): Promise<void> {
   const input = parseRequest(loginSchema, req.body, res);
   if (!input) return;
-  const { email, password } = input;
+  const email = input.email.trim().toLowerCase();
+  const { password } = input;
 
   try {
     const people = await query(
@@ -225,14 +226,24 @@ function tokenHash(token: string): string {
   return crypto.createHash('sha256').update(token).digest('hex');
 }
 
-export async function createSetupTokenForPerson(personId: number): Promise<{ token: string; expiresAt: Date }> {
+type SetupTokenDb = { query: (text: string, params: unknown[]) => Promise<unknown> };
+
+async function insertSetupToken(db: SetupTokenDb, personId: number): Promise<{ token: string; expiresAt: Date }> {
   const token = crypto.randomBytes(32).toString('base64url');
   const expiresAt = new Date(Date.now() + SETUP_TOKEN_MAX_AGE_MS);
-  await query(
+  await db.query(
     'insert into password_setup_token (token_hash, person_id, expires_at) values ($1, $2, $3)',
     [tokenHash(token), personId, expiresAt]
   );
   return { token, expiresAt };
+}
+
+export function createSetupTokenForClient(client: import('pg').PoolClient, personId: number): Promise<{ token: string; expiresAt: Date }> {
+  return insertSetupToken(client, personId);
+}
+
+export function createSetupTokenForPerson(personId: number): Promise<{ token: string; expiresAt: Date }> {
+  return insertSetupToken({ query }, personId);
 }
 
 export async function issueSetupToken(req: Request, res: Response): Promise<void> {
