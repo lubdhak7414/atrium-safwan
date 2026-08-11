@@ -1,63 +1,42 @@
 import { Router } from 'express';
-import { query, withTransaction } from '../db';
-import { requireSession } from '../auth';
+import { z } from 'zod';
+import { withTransaction } from '../db';
+import { optionalSession, requireRole, requireSession } from '../auth';
 import { hoursOfNotice, refundAmount, refundPercent, roomFee, seatFee } from '../credits';
+import { getSessionForCaller, listSessionsForCaller } from '../permissions';
+import { validateSessionWindow } from '../time';
+import { parseRequest } from '../validation';
 
 const router = Router();
 
-const UPDATABLE_FIELDS = [
-  'room_id',
-  'coach_id',
-  'discipline',
-  'session_type',
-  'status',
-  'starts_at',
-  'ends_at'
-];
+const sessionListQuerySchema = z.object({
+  from: z.string().datetime({ offset: true }).optional(),
+  to: z.string().datetime({ offset: true }).optional()
+}).strict();
 
-router.get('/', async (req, res) => {
+const sessionIdSchema = z.coerce.number().int().positive();
+
+const createSessionSchema = z.object({
+  room_id: z.number().int().positive(),
+  coach_id: z.number().int().positive().optional(),
+  discipline: z.string().trim().min(1).max(100),
+  session_type: z.enum(['short', 'standard', 'intensive']),
+  starts_at: z.string().datetime({ offset: true }),
+  ends_at: z.string().datetime({ offset: true })
+}).strict();
+
+const emptyBodySchema = z.object({}).strict().optional();
+
+router.get('/', optionalSession, async (req, res) => {
   try {
-    const from = typeof req.query.from === 'string' && req.query.from ? req.query.from : new Date().toISOString();
-    const to = typeof req.query.to === 'string' && req.query.to ? req.query.to : null;
-
-    const params: unknown[] = [from];
-    let sql = `select id, room_id, coach_id, discipline, session_type, status,
-                      starts_at, ends_at, room_fee_credits, seat_fee_credits
-                 from session
-                where starts_at >= $1
-                  and status <> 'cancelled'`;
-
-    if (to) {
-      params.push(to);
-      sql += ` and starts_at < $${params.length}`;
-    }
-
-    sql += ' order by starts_at';
-
-    const sessions = await query(sql, params);
-    const feed = [];
-
-    for (const session of sessions) {
-      const rooms = await query('select id, name, capacity from room where id = $1', [session.room_id]);
-      const coaches = await query('select id, full_name from person where id = $1', [session.coach_id]);
-      const enrolled = await query(
-        "select count(*)::int as count from enrolment where session_id = $1 and status = 'active'",
-        [session.id]
-      );
-
-      const capacity = rooms.length > 0 ? rooms[0].capacity : 0;
-      const taken = enrolled[0].count;
-
-      feed.push({
-        ...session,
-        room_name: rooms.length > 0 ? rooms[0].name : null,
-        room_capacity: capacity,
-        coach_name: coaches.length > 0 ? coaches[0].full_name : null,
-        enrolled_count: taken,
-        places_remaining: capacity - taken
-      });
-    }
-
+    const input = parseRequest(sessionListQuerySchema, req.query, res);
+    if (!input) return;
+    const caller = res.locals.person;
+    const feed = await listSessionsForCaller(
+      caller,
+      input.from ?? new Date().toISOString(),
+      input.to
+    );
     res.json(feed);
   } catch (err) {
     console.error(err);
@@ -67,87 +46,102 @@ router.get('/', async (req, res) => {
 
 router.get('/:id', requireSession, async (req, res) => {
   try {
-    const id = Number(req.params.id);
-    if (!Number.isInteger(id)) {
+    const parsedId = sessionIdSchema.safeParse(req.params.id);
+    if (!parsedId.success) {
       res.status(404).json({ error: 'no such session' });
       return;
     }
-
-    const sessions = await query('select * from session where id = $1', [id]);
-
-    if (sessions.length === 0) {
+    const session = await getSessionForCaller(parsedId.data, res.locals.person);
+    if (!session) {
       res.status(404).json({ error: 'no such session' });
       return;
     }
-
-    const session = sessions[0];
-    const rooms = await query('select id, name, capacity from room where id = $1', [session.room_id]);
-    const coaches = await query('select id, full_name, email from person where id = $1', [session.coach_id]);
-    const attendees = await query(
-      `select e.id, e.status, e.credits_charged, e.credits_refunded, e.enrolled_at, e.cancelled_at,
-              p.id as person_id, p.full_name, p.email
-         from enrolment e
-         join person p on p.id = e.person_id
-        where e.session_id = $1
-        order by e.id`,
-      [id]
-    );
-
-    res.json({
-      ...session,
-      room: rooms.length > 0 ? rooms[0] : null,
-      coach: coaches.length > 0 ? coaches[0] : null,
-      attendees
-    });
+    res.json(session);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'could not load the session' });
   }
 });
 
-router.post('/', requireSession, async (req, res) => {
+router.post('/', requireSession, requireRole('coach', 'admin'), async (req, res) => {
   try {
-    const body = req.body || {};
-    const { room_id, coach_id, discipline, session_type, starts_at, ends_at } = body;
-
-    if (!room_id || !coach_id || !discipline || !session_type || !starts_at || !ends_at) {
-      res.status(400).json({
-        error: 'room_id, coach_id, discipline, session_type, starts_at and ends_at are all required'
-      });
+    const body = parseRequest(createSessionSchema, req.body, res);
+    if (!body) return;
+    const caller = res.locals.person;
+    if (caller.kind === 'coach' && body.coach_id !== undefined) {
+      res.status(400).json({ error: 'coach_id is assigned from the signed-in coach' });
       return;
     }
-
-    const rooms = await query('select id, name, capacity from room where id = $1', [room_id]);
-    if (rooms.length === 0) {
-      res.status(400).json({ error: 'no such room' });
+    if (caller.kind === 'admin' && body.coach_id === undefined) {
+      res.status(400).json({ error: 'coach_id is required for an administrator' });
       return;
     }
-
-    const coaches = await query('select id, credits from person where id = $1', [coach_id]);
-    if (coaches.length === 0) {
-      res.status(400).json({ error: 'no such coach' });
-      return;
-    }
-
-    const clashes = await query(
-      `select id, starts_at, ends_at
-         from session
-        where room_id = $1
-          and starts_at <= $3
-          and ends_at >= $2
-        limit 1`,
-      [room_id, starts_at, ends_at]
-    );
-
-    if (clashes.length > 0) {
-      res.status(409).json({ error: `${rooms[0].name} is already booked for that time` });
-      return;
-    }
-
-    const fee = roomFee(session_type);
-    const seat = seatFee(session_type);
+    const coach_id = caller.kind === 'coach' ? caller.id : body.coach_id!;
+    const { room_id, discipline, session_type, starts_at, ends_at } = body;
 
     const created = await withTransaction(async (client) => {
+      const rooms = await client.query('select id, name, capacity from room where id = $1 for update', [room_id]);
+      if (rooms.rowCount === 0) {
+        throw Object.assign(new Error('no such room'), { name: 'BadRequestError' });
+      }
+
+      const coaches = await client.query(
+        "select id, credits, kind, active from person where id = $1 for update",
+        [coach_id]
+      );
+      if (coaches.rowCount === 0 || coaches.rows[0].kind !== 'coach' || !coaches.rows[0].active) {
+        throw Object.assign(new Error('no such coach'), { name: 'BadRequestError' });
+      }
+
+      const databaseNow = await client.query<{ now: Date }>('select now() as now');
+      const validationError = validateSessionWindow(
+        starts_at,
+        ends_at,
+        session_type,
+        new Date(databaseNow.rows[0].now)
+      );
+      if (validationError) {
+        throw Object.assign(new Error(validationError), { name: 'BadRequestError' });
+      }
+
+      const clashes = await client.query(
+        `select id
+           from session
+          where room_id = $1
+            and status <> 'cancelled'
+            and tstzrange(starts_at, ends_at, '[)') && tstzrange($2::timestamptz, $3::timestamptz, '[)')
+          limit 1`,
+        [room_id, starts_at, ends_at]
+      );
+      if ((clashes.rowCount ?? 0) > 0) {
+        throw Object.assign(new Error(`${rooms.rows[0].name} is already booked for that time`), {
+          name: 'ConflictError'
+        });
+      }
+
+      const commitments = await client.query(
+        `select 1
+           from session s
+          where s.status <> 'cancelled'
+            and (s.coach_id = $1 or exists (
+              select 1
+                from enrolment e
+               where e.session_id = s.id
+                 and e.person_id = $1
+                 and e.status = 'active'
+            ))
+            and tstzrange(s.starts_at, s.ends_at, '[)') && tstzrange($2::timestamptz, $3::timestamptz, '[)')
+          limit 1`,
+        [coach_id, starts_at, ends_at]
+      );
+      if ((commitments.rowCount ?? 0) > 0) {
+        throw Object.assign(new Error('the coach is already committed during that time'), {
+          name: 'ConflictError'
+        });
+      }
+
+      const fee = roomFee(session_type);
+      const seat = seatFee(session_type);
       const inserted = await client.query(
         `insert into session
            (room_id, coach_id, discipline, session_type, status, starts_at, ends_at,
@@ -157,87 +151,64 @@ router.post('/', requireSession, async (req, res) => {
         [room_id, coach_id, discipline, session_type, starts_at, ends_at, fee, seat]
       );
 
-      await client.query('update person set credits = credits - $1 where id = $2', [fee, coach_id]);
+      const debited = await client.query(
+        'update person set credits = credits - $1 where id = $2 and credits >= $1 returning id',
+        [fee, coach_id]
+      );
+      if (debited.rowCount !== 1) {
+        throw Object.assign(new Error('the coach does not have enough credits'), { name: 'ConflictError' });
+      }
 
       return inserted.rows[0];
     });
 
     res.status(201).json(created);
   } catch (err) {
+    if (err instanceof Error && err.name === 'BadRequestError') {
+      res.status(400).json({ error: err.message });
+      return;
+    }
+    if (err instanceof Error && err.name === 'ConflictError') {
+      res.status(409).json({ error: err.message });
+      return;
+    }
     console.error(err);
     res.status(500).json({ error: 'could not create the session' });
   }
 });
 
-router.patch('/:id', requireSession, async (req, res) => {
+router.post('/:id/cancel', requireSession, requireRole('coach', 'admin'), async (req, res) => {
   try {
-    const id = Number(req.params.id);
-    if (!Number.isInteger(id)) {
+    const parsedId = sessionIdSchema.safeParse(req.params.id);
+    if (!parsedId.success) {
       res.status(404).json({ error: 'no such session' });
       return;
     }
-
-    const body = req.body || {};
-
-    const assignments: string[] = [];
-    const params: unknown[] = [];
-
-    for (const field of UPDATABLE_FIELDS) {
-      if (body[field] !== undefined) {
-        params.push(body[field]);
-        assignments.push(`${field} = $${params.length}`);
-      }
-    }
-
-    if (assignments.length === 0) {
-      res.status(400).json({ error: 'nothing to update' });
-      return;
-    }
-
-    params.push(id);
-
-    const updated = await query(
-      `update session set ${assignments.join(', ')} where id = $${params.length} returning *`,
-      params
-    );
-
-    if (updated.length === 0) {
-      res.status(404).json({ error: 'no such session' });
-      return;
-    }
-
-    res.json(updated[0]);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'could not update the session' });
-  }
-});
-
-router.post('/:id/cancel', requireSession, async (req, res) => {
-  try {
-    const id = Number(req.params.id);
-    if (!Number.isInteger(id)) {
-      res.status(404).json({ error: 'no such session' });
-      return;
-    }
-
-    const sessions = await query('select * from session where id = $1', [id]);
-
-    if (sessions.length === 0) {
-      res.status(404).json({ error: 'no such session' });
-      return;
-    }
-
-    const session = sessions[0];
-    if (session.status === 'cancelled') {
-      res.status(409).json({ error: 'that session is already cancelled' });
-      return;
-    }
-
-    const percent = refundPercent(hoursOfNotice(new Date(), new Date(session.starts_at)));
-    const roomRefund = refundAmount(Number(session.room_fee_credits), percent);
+    if (parseRequest(emptyBodySchema, req.body, res) === null) return;
+    const id = parsedId.data;
+    const caller = res.locals.person;
 
     const summary = await withTransaction(async (client) => {
+      const lockedSessions = await client.query('select * from session where id = $1 for update', [id]);
+      if (lockedSessions.rowCount === 0) {
+        throw Object.assign(new Error('no such session'), { name: 'NotFoundError' });
+      }
+      const session = lockedSessions.rows[0];
+      if (caller.kind === 'coach' && session.coach_id !== caller.id) {
+        throw Object.assign(new Error('only the teaching coach may cancel this session'), { name: 'ForbiddenError' });
+      }
+      if (session.status === 'cancelled') {
+        throw Object.assign(new Error('that session is already cancelled'), { name: 'ConflictError' });
+      }
+      if (session.status !== 'scheduled') {
+        throw Object.assign(new Error('only scheduled sessions may be cancelled'), { name: 'ConflictError' });
+      }
+      if (new Date(session.starts_at).getTime() <= Date.now()) {
+        throw Object.assign(new Error('a session cannot be cancelled after it starts'), { name: 'ConflictError' });
+      }
+
+      const percent = refundPercent(hoursOfNotice(new Date(), new Date(session.starts_at)));
+      const roomRefund = refundAmount(Number(session.room_fee_credits), percent);
       const enrolments = await client.query(
         "select id, person_id, credits_charged from enrolment where session_id = $1 and status = 'active'",
         [id]
@@ -246,21 +217,22 @@ router.post('/:id/cancel', requireSession, async (req, res) => {
       let seatsRefunded = 0;
 
       for (const enrolment of enrolments.rows) {
-        const refund = refundAmount(Number(enrolment.credits_charged), percent);
+        const participantRefund = Number(enrolment.credits_charged);
 
         await client.query(
           `update enrolment
-              set status = 'cancelled', credits_refunded = $1, cancelled_at = now()
+              set status = 'cancelled', credits_refunded = $1, cancelled_at = now(),
+                  cancelled_by_person_id = $3
             where id = $2`,
-          [refund, enrolment.id]
+          [participantRefund, enrolment.id, caller.id]
         );
 
         await client.query('update person set credits = credits + $1 where id = $2', [
-          refund,
+          participantRefund,
           enrolment.person_id
         ]);
 
-        seatsRefunded += refund;
+        seatsRefunded += participantRefund;
       }
 
       await client.query('update person set credits = credits + $1 where id = $2', [
@@ -268,20 +240,35 @@ router.post('/:id/cancel', requireSession, async (req, res) => {
         session.coach_id
       ]);
 
-      await client.query("update session set status = 'cancelled' where id = $1", [id]);
+      await client.query(
+        "update session set status = 'cancelled', cancelled_at = now(), cancelled_by_person_id = $2 where id = $1",
+        [id, caller.id]
+      );
 
-      return { enrolments: enrolments.rowCount, seatsRefunded };
+      return { enrolments: enrolments.rowCount, seatsRefunded, percent, roomRefund };
     });
 
     res.json({
       id,
       status: 'cancelled',
-      refund_percent: percent,
-      room_fee_refunded: roomRefund,
+      refund_percent: summary.percent,
+      room_fee_refunded: summary.roomRefund,
       enrolments_cancelled: summary.enrolments,
       seat_fees_refunded: summary.seatsRefunded
     });
   } catch (err) {
+    if (err instanceof Error && err.name === 'NotFoundError') {
+      res.status(404).json({ error: err.message });
+      return;
+    }
+    if (err instanceof Error && err.name === 'ForbiddenError') {
+      res.status(403).json({ error: err.message });
+      return;
+    }
+    if (err instanceof Error && err.name === 'ConflictError') {
+      res.status(409).json({ error: err.message });
+      return;
+    }
     console.error(err);
     res.status(500).json({ error: 'could not cancel the session' });
   }

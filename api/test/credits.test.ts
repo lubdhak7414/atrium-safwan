@@ -27,3 +27,8 @@ test('a refund of part of a credit', () => {
   assert.equal(refundAmount(120, 0.25), 30);
   assert.equal(refundAmount(30, 0.25), 8);
 });
+
+test('notice hours never turn a past session into future notice', () => {
+  const start = new Date('2026-11-05T15:00:00Z');
+  assert.equal(hoursOfNotice(new Date('2026-11-05T16:00:00Z'), start), 0);
+});

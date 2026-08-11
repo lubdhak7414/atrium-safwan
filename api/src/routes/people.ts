@@ -1,24 +1,20 @@
 import { Router } from 'express';
-import { query } from '../db';
+import { z } from 'zod';
 import { requireSession } from '../auth';
+import { listPeopleForCaller } from '../permissions';
+import { parseRequest } from '../validation';
 
 const router = Router();
 
+const peopleQuerySchema = z.object({
+  kind: z.enum(['admin', 'coach', 'participant']).optional()
+}).strict();
+
 router.get('/', requireSession, async (req, res) => {
   try {
-    const kind = typeof req.query.kind === 'string' && req.query.kind ? req.query.kind : null;
-
-    const params: unknown[] = [];
-    let sql = 'select id, email, full_name, kind, credits, active from person';
-
-    if (kind) {
-      params.push(kind);
-      sql += ` where kind = $${params.length}`;
-    }
-
-    sql += ' order by full_name';
-
-    const people = await query(sql, params);
+    const input = parseRequest(peopleQuerySchema, req.query, res);
+    if (!input) return;
+    const people = await listPeopleForCaller(res.locals.person, input.kind);
     res.json(people);
   } catch (err) {
     console.error(err);

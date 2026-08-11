@@ -1,8 +1,11 @@
 import crypto from 'node:crypto';
 import { Request, Response, NextFunction } from 'express';
 import argon2 from 'argon2';
+import { z } from 'zod';
 import { query } from './db';
 import { withTransaction } from './db';
+import { Role } from './permissions';
+import { parseRequest } from './validation';
 
 export const SESSION_COOKIE = 'atrium_session';
 
@@ -10,6 +13,24 @@ const SESSION_MAX_AGE_MS = 1000 * 60 * 60 * 12;
 const SETUP_TOKEN_MAX_AGE_MS = 1000 * 60 * 30;
 const AUTH_FAILURE = 'invalid email or password';
 const SETUP_FAILURE = 'invalid, expired, or already used setup token';
+
+const loginSchema = z.object({
+  email: z.string().trim().min(1),
+  password: z.string().min(1)
+}).strict();
+
+const setupTokenSchema = z.object({
+  email: z.string().trim().min(1)
+}).strict();
+
+const redeemBodySchema = z.object({
+  token: z.string().min(1).optional(),
+  password: z.string().min(1).optional()
+}).strict().optional();
+
+const redeemQuerySchema = z.object({
+  token: z.string().min(1).optional()
+}).strict();
 
 export function sessionSecret(): string {
   const secret = process.env.SESSION_SECRET;
@@ -97,14 +118,44 @@ export async function requireSession(req: Request, res: Response, next: NextFunc
   }
 }
 
-export async function login(req: Request, res: Response): Promise<void> {
-  const email = req.body ? req.body.email : undefined;
-  const password = req.body ? req.body.password : undefined;
+export function requireRole(...roles: Role[]) {
+  return (req: Request, res: Response, next: NextFunction): void => {
+    const person = res.locals.person;
+    if (!person || !roles.includes(person.kind)) {
+      res.status(403).json({ error: 'insufficient permissions' });
+      return;
+    }
+    next();
+  };
+}
 
-  if (typeof email !== 'string' || !email || typeof password !== 'string' || !password) {
-    res.status(400).json({ error: 'email and password are required' });
+export async function optionalSession(req: Request, res: Response, next: NextFunction): Promise<void> {
+  const session = readSession(req.cookies ? req.cookies[SESSION_COOKIE] : undefined);
+  if (!session) {
+    next();
     return;
   }
+
+  try {
+    const people = await query(
+      'select id, email, full_name, kind, credits, active from person where id = $1',
+      [session.personId]
+    );
+    if (people[0]?.active) {
+      res.locals.personId = people[0].id;
+      res.locals.person = people[0];
+    }
+    next();
+  } catch (err) {
+    console.error(err);
+    next();
+  }
+}
+
+export async function login(req: Request, res: Response): Promise<void> {
+  const input = parseRequest(loginSchema, req.body, res);
+  if (!input) return;
+  const { email, password } = input;
 
   try {
     const people = await query(
@@ -180,11 +231,9 @@ export async function issueSetupToken(req: Request, res: Response): Promise<void
     return;
   }
 
-  const email = req.body ? req.body.email : undefined;
-  if (typeof email !== 'string' || !email) {
-    res.status(400).json({ error: 'email is required' });
-    return;
-  }
+  const input = parseRequest(setupTokenSchema, req.body, res);
+  if (!input) return;
+  const { email } = input;
 
   try {
     const token = crypto.randomBytes(32).toString('base64url');
@@ -220,9 +269,13 @@ export async function redeemSetupToken(req: Request, res: Response): Promise<voi
     return;
   }
 
-  const token = typeof req.body?.token === 'string' ? req.body.token : typeof req.query.token === 'string' ? req.query.token : '';
-  const password = req.body?.password;
-  if (!token || typeof password !== 'string' || !password) {
+  const body = parseRequest(redeemBodySchema, req.body, res);
+  if (body === null) return;
+  const queryInput = parseRequest(redeemQuerySchema, req.query, res);
+  if (!queryInput) return;
+  const token = body?.token ?? queryInput.token;
+  const password = body?.password;
+  if (!token || !password) {
     res.status(400).json({ error: 'token and password are required' });
     return;
   }
