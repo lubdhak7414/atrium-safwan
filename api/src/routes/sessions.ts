@@ -121,7 +121,7 @@ router.post('/', requireSession, requireRole('coach', 'admin'), async (req, res)
       localDate: body.local_date,
       localStartTime: body.local_start_time,
       localEndTime: body.local_end_time
-    });
+    }, caller);
     res.status(201).json(created);
   } catch (error) {
     sendError(res, error, 'could not create the session');

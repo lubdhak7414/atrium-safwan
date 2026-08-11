@@ -203,7 +203,7 @@ async function enqueuePeople(
   const ids = [...new Set(personIds)].sort((a, b) => a - b);
   if (ids.length === 0) return;
   const people = await client.query(
-    'select email from person where id = any($1::int[]) and active = true order by id',
+    'select email from person where id = any($1::int[]) order by id',
     [ids]
   );
   for (const person of people.rows) {
@@ -235,7 +235,9 @@ function requireParsedWindow(input: SessionInput | RescheduleInput, now: Date): 
   return result;
 }
 
-export async function createSession(input: SessionInput): Promise<any> {
+export async function createSession(input: SessionInput, caller: Caller): Promise<any> {
+  if (caller.kind !== 'coach' && caller.kind !== 'admin') forbidden('only coaches and administrators may create sessions');
+  if (caller.kind === 'coach' && input.coachId !== caller.id) forbidden('a coach may only create their own sessions');
   return withTransaction(async (client) => {
     const rooms = await lockRooms(client, [input.roomId]);
     const coaches = await client.query(
@@ -326,7 +328,7 @@ export async function enrolSession(sessionId: number, person: Caller): Promise<a
        returning *`,
       [sessionId, person.id, session.seat_fee_credits]
     );
-    const coach = await client.query('select email from person where id = $1 and active = true', [session.coach_id]);
+    const coach = await client.query('select email from person where id = $1', [session.coach_id]);
     if (coach.rowCount === 1) {
       await enqueueEmail(
         client,
@@ -384,7 +386,7 @@ export async function cancelBooking(enrolmentId: number, person: Caller): Promis
       [refund, person.id, enrolmentId]
     );
     await client.query('update person set credits = credits + $1 where id = $2', [refund, person.id]);
-    const coach = await client.query('select email from person where id = $1 and active = true', [session.rows[0].coach_id]);
+    const coach = await client.query('select email from person where id = $1', [session.rows[0].coach_id]);
     if (coach.rowCount === 1) {
       await enqueueEmail(
         client,
@@ -468,7 +470,7 @@ export async function changeBooking(enrolmentId: number, destinationSessionId: n
       [destination.id, person.id, destinationFee]
     );
     const coaches = await client.query(
-      'select id, email from person where id = any($1::int[]) and active = true order by id',
+      'select distinct on (id) id, email from person where id = any($1::int[]) order by id',
       [[oldSession.coach_id, destination.coach_id]]
     );
     for (const coach of coaches.rows) {
@@ -486,6 +488,7 @@ export async function changeBooking(enrolmentId: number, destinationSessionId: n
 }
 
 export async function cancelSession(sessionId: number, caller: Caller): Promise<any> {
+  if (caller.kind !== 'coach' && caller.kind !== 'admin') forbidden('only coaches and administrators may cancel sessions');
   return withTransaction(async (client) => {
     const session = await lockSessionWithRoom(client, sessionId);
     if (caller.kind === 'coach' && session.coach_id !== caller.id) forbidden('only the teaching coach may cancel this session');
@@ -538,18 +541,21 @@ export async function cancelSession(sessionId: number, caller: Caller): Promise<
       'Coaching session cancelled',
       `Session ${sessionId} was cancelled.`
     );
-    await enqueueAdmins(
-      client,
-      `session-change:${sessionId}:${changeVersion}:room.cancelled_by_coach`,
-      'room.cancelled_by_coach',
-      'Room booking cancelled',
-      `Room booking for session ${sessionId} was cancelled.`
-    );
+    if (caller.kind === 'coach') {
+      await enqueueAdmins(
+        client,
+        `session-change:${sessionId}:${changeVersion}:room.cancelled_by_coach`,
+        'room.cancelled_by_coach',
+        'Room booking cancelled',
+        `Room booking for session ${sessionId} was cancelled.`
+      );
+    }
     return { id: sessionId, status: 'cancelled', refund_percent: percent, room_fee_refunded: roomRefund, enrolments_cancelled: enrolments.rowCount, seat_fees_refunded: seatsRefunded };
   });
 }
 
 export async function rescheduleSession(sessionId: number, input: RescheduleInput, caller: Caller): Promise<any> {
+  if (caller.kind !== 'coach' && caller.kind !== 'admin') forbidden('only coaches and administrators may reschedule sessions');
   return withTransaction(async (client) => {
     const metadata = await client.query('select room_id from session where id = $1', [sessionId]);
     if (metadata.rowCount === 0) notFound('no such session');
@@ -602,7 +608,7 @@ export async function rescheduleSession(sessionId: number, input: RescheduleInpu
     await enqueuePeople(
       client,
       coachAttendees.rows.map((row) => Number(row.person_id)),
-      `session-change:${sessionId}:${updated.rows[0].change_version}:session.changed`,
+      `session-change:${sessionId}:${updated.rows[0].change_version}:coach.attendee.session_changed`,
       'coach.attendee.session_changed',
       'Attended session changed',
       `Session ${sessionId} changed time or room.`
@@ -644,11 +650,38 @@ export async function reassignSession(sessionId: number, newCoachId: number, cal
         returning *`,
       [newCoachId, sessionId]
     );
+    const coachAttendees = await client.query(
+      `select e.person_id
+         from enrolment e
+         join person p on p.id = e.person_id
+        where e.session_id = $1 and e.status = 'active' and p.kind = 'coach' and e.person_id <> $2`,
+      [sessionId, newCoachId]
+    );
+    await enqueuePeople(
+      client,
+      coachAttendees.rows.map((row) => Number(row.person_id)),
+      `session-change:${sessionId}:${updated.rows[0].change_version}:coach.attendee.session_changed`,
+      'coach.attendee.session_changed',
+      'Attended session changed',
+      `Session ${sessionId} changed teaching coach.`
+    );
+    const oldCoach = await client.query('select email from person where id = $1', [session.coach_id]);
+    if (oldCoach.rowCount === 1) {
+      await enqueueEmail(
+        client,
+        `session-change:${sessionId}:${updated.rows[0].change_version}:coach.reassigned`,
+        'coach.reassigned',
+        oldCoach.rows[0].email,
+        'Session reassigned',
+        `Session ${sessionId} was reassigned to another coach.`
+      );
+    }
     return updated.rows[0];
   });
 }
 
 export async function completeSession(sessionId: number, caller: Caller): Promise<any> {
+  if (caller.kind !== 'coach' && caller.kind !== 'admin') forbidden('only coaches and administrators may complete sessions');
   return withTransaction(async (client) => {
     const session = await lockSessionWithRoom(client, sessionId);
     if (caller.kind === 'coach' && caller.id !== session.coach_id) forbidden('only the teaching coach may complete this session');
@@ -664,6 +697,7 @@ export async function completeSession(sessionId: number, caller: Caller): Promis
 }
 
 export async function checkIn(sessionId: number, enrolmentId: number, caller: Caller): Promise<any> {
+  if (caller.kind !== 'coach' && caller.kind !== 'admin') forbidden('only coaches and administrators may check in attendees');
   return withTransaction(async (client) => {
     const metadata = await client.query(
       `select e.person_id, s.room_id
