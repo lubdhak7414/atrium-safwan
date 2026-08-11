@@ -5,6 +5,7 @@ import { issueSetupToken, login, logout, me, redeemSetupToken, requireSession, s
 import sessionRoutes from './routes/sessions';
 import roomRoutes from './routes/rooms';
 import peopleRoutes from './routes/people';
+import enrolmentRoutes from './routes/enrolments';
 
 export function createApp(): express.Express {
   sessionSecret();
@@ -28,6 +29,7 @@ export function createApp(): express.Express {
   app.use('/api/sessions', sessionRoutes);
   app.use('/api/rooms', roomRoutes);
   app.use('/api/people', peopleRoutes);
+  app.use('/api/enrolments', enrolmentRoutes);
 
   return app;
 }

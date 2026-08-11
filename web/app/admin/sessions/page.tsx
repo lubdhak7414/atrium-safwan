@@ -119,8 +119,9 @@ export default function AdminSessions() {
         coach_id: Number(coachId),
         discipline,
         session_type: sessionType,
-        starts_at: new Date(`${date}T${startTime}`).toISOString(),
-        ends_at: new Date(`${date}T${endTime}`).toISOString()
+        local_date: date,
+        local_start_time: startTime,
+        local_end_time: endTime
       })
     });
 

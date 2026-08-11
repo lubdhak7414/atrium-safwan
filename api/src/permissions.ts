@@ -87,7 +87,7 @@ export async function listSessionsForCaller(
             s.starts_at, s.ends_at, s.room_fee_credits, s.seat_fee_credits,
             r.name as room_name, r.capacity as room_capacity,
             coach.full_name as coach_name,
-            count(active_e.id)::int as enrolled_count,
+            count(active_e.id) filter (where active_e.person_id <> s.coach_id)::int as enrolled_count,
             own_e.id as own_enrolment_id, own_e.status as own_enrolment_status,
             own_e.credits_charged as own_credits_charged
        from session s
@@ -188,16 +188,24 @@ export async function getSessionForCaller(sessionId: number, caller: Caller): Pr
 
   const attendees = await query(
     `select e.id, e.status, e.credits_charged, e.credits_refunded, e.enrolled_at, e.cancelled_at,
-            e.cancelled_by_person_id, p.id as person_id, p.full_name, p.email,
-            count(ci.id)::int as check_in_count,
-            array_remove(array_agg(ci.checked_in_at order by ci.checked_in_at), null) as check_in_times
+             e.cancelled_by_person_id, p.id as person_id, p.full_name, p.email,
+             count(ci.id)::int as check_in_count,
+             array_remove(array_agg(ci.checked_in_at order by ci.checked_in_at), null) as check_in_times,
+             (
+               select count(ci2.id)::int
+                 from check_in ci2
+                 join enrolment e2 on e2.id = ci2.enrolment_id
+                 join session s2 on s2.id = e2.session_id
+                where e2.person_id = e.person_id
+                  and s2.coach_id = $2
+             ) as coach_attendance_count
        from enrolment e
        join person p on p.id = e.person_id
        left join check_in ci on ci.enrolment_id = e.id
       where e.session_id = $1
       group by e.id, p.id
       order by e.id`,
-    [sessionId]
+      [sessionId, session.coach_id]
   );
 
   const result: Record<string, unknown> = {

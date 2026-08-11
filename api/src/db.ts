@@ -20,16 +20,24 @@ export async function query<T extends QueryResultRow = any>(
 }
 
 export async function withTransaction<T>(fn: (client: PoolClient) => Promise<T>): Promise<T> {
-  const client = await pool.connect();
-  try {
-    await client.query('begin');
-    const result = await fn(client);
-    await client.query('commit');
-    return result;
-  } catch (err) {
-    await client.query('rollback');
-    throw err;
-  } finally {
-    client.release();
+  const maxAttempts = 3;
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const client = await pool.connect();
+    try {
+      await client.query('begin');
+      const result = await fn(client);
+      await client.query('commit');
+      return result;
+    } catch (err) {
+      await client.query('rollback');
+      const code = (err as { code?: string }).code;
+      const retryable = code === '40P01' || code === '40001' || (err as Error).name === 'TransactionRetryError';
+      if (!retryable || attempt === maxAttempts) throw err;
+      await new Promise((resolve) => setTimeout(resolve, attempt * 10));
+    } finally {
+      client.release();
+    }
   }
+
+  throw new Error('transaction retry limit reached');
 }

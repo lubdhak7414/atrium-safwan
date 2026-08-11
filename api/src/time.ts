@@ -8,6 +8,69 @@ const DURATION_MINUTES: Record<string, number> = {
   intensive: 210
 };
 
+export type LocalSessionInput = {
+  localDate: string;
+  localStartTime: string;
+  localEndTime: string;
+  sessionType: string;
+};
+
+export type ParsedSessionWindow = {
+  startsAt: string;
+  endsAt: string;
+};
+
+function localDateTime(date: string, time: string): DateTime | null {
+  const dateMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
+  const timeMatch = /^(\d{2}):(\d{2})$/.exec(time);
+  if (!dateMatch || !timeMatch) return null;
+
+  const value = DateTime.fromObject({
+    year: Number(dateMatch[1]),
+    month: Number(dateMatch[2]),
+    day: Number(dateMatch[3]),
+    hour: Number(timeMatch[1]),
+    minute: Number(timeMatch[2])
+  }, { zone: CENTRE_TIMEZONE });
+
+  if (!value.isValid || value.toFormat('yyyy-MM-dd HH:mm') !== `${date} ${time}`) return null;
+  if (value.getPossibleOffsets().length !== 1) return null;
+  return value;
+}
+
+export function parseLocalSessionWindow(
+  input: LocalSessionInput,
+  now: Date = new Date()
+): ParsedSessionWindow | string {
+  const starts = localDateTime(input.localDate, input.localStartTime);
+  const ends = localDateTime(input.localDate, input.localEndTime);
+  if (!starts || !ends) return 'session times must be valid, unambiguous centre-local times';
+
+  const expectedMinutes = DURATION_MINUTES[input.sessionType];
+  if (!expectedMinutes) return 'session type is invalid';
+  if (ends.toMillis() <= starts.toMillis()) return 'end time must be after start time';
+  if (ends.diff(starts, 'minutes').minutes !== expectedMinutes) {
+    return `${input.sessionType} sessions must last ${expectedMinutes} minutes`;
+  }
+  if (starts.toMillis() < now.getTime() + 48 * 60 * 60 * 1000) {
+    return 'sessions must start at least 48 hours from now';
+  }
+  if (starts.weekday === 7 || ends.weekday === 7) return 'the centre is closed on Sundays';
+
+  const opening = 7 * 60;
+  const closing = 21 * 60;
+  const startMinutes = starts.hour * 60 + starts.minute;
+  const endMinutes = ends.hour * 60 + ends.minute;
+  if (startMinutes < opening || endMinutes > closing) {
+    return 'sessions must fit within 07:00-21:00 centre-local time';
+  }
+
+  return {
+    startsAt: starts.toUTC().toISO()!,
+    endsAt: ends.toUTC().toISO()!
+  };
+}
+
 export function validateSessionWindow(
   startsAt: string,
   endsAt: string,

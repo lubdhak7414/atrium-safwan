@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { hoursOfNotice, refundAmount, refundPercent, roomFee, seatFee } from '../src/credits';
+import { hoursOfNotice, participantRefundPercent, refundAmount, refundPercent, roomFee, seatFee } from '../src/credits';
 
 test('the fee schedule follows the session type', () => {
   assert.equal(roomFee('short'), 30);
@@ -26,6 +26,12 @@ test('a refund of part of a credit', () => {
   assert.equal(refundAmount(40, 0.5), 20);
   assert.equal(refundAmount(120, 0.25), 30);
   assert.equal(refundAmount(30, 0.25), 8);
+});
+
+test('participant refunds follow their shorter cancellation tiers', () => {
+  assert.equal(participantRefundPercent(24), 1);
+  assert.equal(participantRefundPercent(12), 0.5);
+  assert.equal(participantRefundPercent(11.99), 0);
 });
 
 test('notice hours never turn a past session into future notice', () => {

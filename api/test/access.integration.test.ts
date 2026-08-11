@@ -191,8 +191,9 @@ describe('access-control integration', () => {
         coach_id: data.coach.id,
         discipline: 'should-not-create',
         session_type: 'standard',
-        starts_at: '2030-02-01T15:00:00Z',
-        ends_at: '2030-02-01T16:00:00Z'
+         local_date: '2030-02-01',
+         local_start_time: '10:00',
+         local_end_time: '11:00'
       })
     }, participantCookie);
     assert.equal(forbidden.status, 403);
@@ -206,8 +207,9 @@ describe('access-control integration', () => {
         coach_id: data.otherCoach.id,
         discipline: 'wrong-identity',
         session_type: 'standard',
-        starts_at: '2030-02-01T15:00:00Z',
-        ends_at: '2030-02-01T16:00:00Z'
+         local_date: '2030-02-01',
+         local_start_time: '15:00',
+         local_end_time: '16:00'
       })
     }, coachCookie);
     assert.equal(bodyCoachId.status, 400);
@@ -219,8 +221,9 @@ describe('access-control integration', () => {
         room_id: 3,
         discipline: 'caller-owned',
         session_type: 'standard',
-        starts_at: '2030-02-02T15:00:00Z',
-        ends_at: '2030-02-02T16:00:00Z'
+         local_date: '2030-02-02',
+         local_start_time: '15:00',
+         local_end_time: '16:00'
       })
     }, coachCookie);
     assert.equal(createdResponse.status, 201);
@@ -230,11 +233,12 @@ describe('access-control integration', () => {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
-        room_id: 3,
-        discipline: 'coach-overlap',
-        session_type: 'standard',
-        starts_at: '2030-01-15T15:00:00Z',
-        ends_at: '2030-01-15T16:00:00Z'
+         room_id: 3,
+         discipline: 'coach-overlap',
+         session_type: 'standard',
+         local_date: '2030-01-15',
+         local_start_time: '10:00',
+         local_end_time: '11:00'
       })
     }, coachCookie);
     assert.equal(overlappingCoachSession.status, 409);
@@ -247,8 +251,9 @@ describe('access-control integration', () => {
         room_id: 3,
         discipline: 'too-soon',
         session_type: 'standard',
-        starts_at: tooSoonStart.toISOString(),
-        ends_at: new Date(tooSoonStart.getTime() + 60 * 60 * 1000).toISOString()
+         local_date: tooSoonStart.toISOString().slice(0, 10),
+         local_start_time: '12:00',
+         local_end_time: '13:00'
       })
     }, coachCookie);
     assert.equal(tooSoon.status, 400);
@@ -260,8 +265,9 @@ describe('access-control integration', () => {
         room_id: 3,
         discipline: 'bad-hours',
         session_type: 'standard',
-        starts_at: '2030-02-03T03:00:00Z',
-        ends_at: '2030-02-03T04:00:00Z'
+         local_date: '2030-02-03',
+         local_start_time: '03:00',
+         local_end_time: '04:00'
       })
     }, coachCookie);
     assert.equal(badHours.status, 400);
@@ -273,8 +279,9 @@ describe('access-control integration', () => {
         room_id: 3,
         discipline: 'backwards',
         session_type: 'standard',
-        starts_at: '2030-02-04T15:00:00Z',
-        ends_at: '2030-02-04T14:00:00Z'
+         local_date: '2030-02-04',
+         local_start_time: '15:00',
+         local_end_time: '14:00'
       })
     }, coachCookie);
     assert.equal(backwards.status, 400);
@@ -287,8 +294,9 @@ describe('access-control integration', () => {
         room_id: 3,
         discipline: 'insufficient-credits',
         session_type: 'standard',
-        starts_at: '2030-02-05T15:00:00Z',
-        ends_at: '2030-02-05T16:00:00Z'
+         local_date: '2030-02-05',
+         local_start_time: '15:00',
+         local_end_time: '16:00'
       })
     }, coachCookie);
     assert.equal(insufficient.status, 409);
