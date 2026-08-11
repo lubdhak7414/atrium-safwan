@@ -31,7 +31,7 @@ describe('authentication integration', () => {
   });
 
   async function fixture(
-    options: { active?: boolean; legacy?: boolean } = {},
+    options: { active?: boolean; legacy?: boolean; kind?: 'admin' | 'coach' | 'participant' } = {},
     reset = true
   ): Promise<{ email: string; password: string; id: number }> {
     if (reset) await resetDatabase();
@@ -42,9 +42,9 @@ describe('authentication integration', () => {
       : await hashPassword(password);
     const people = await query<{ id: number }>(
       `insert into person (email, password_hash, full_name, kind, credits, active, created_at)
-       values ($1, $2, 'Integration User', 'participant', 4000, $3, now())
+       values ($1, $2, 'Integration User', $3, 4000, $4, now())
        returning id`,
-      [email, storedPassword, options.active ?? true]
+      [email, storedPassword, options.kind ?? 'participant', options.active ?? true]
     );
     return { email, password, id: people[0].id };
   }
@@ -129,6 +129,7 @@ describe('authentication integration', () => {
 
   test('setup tokens are local-only, hashed, atomic, single-use, and expiry checked', async () => {
     const account = await fixture();
+    const coach = await fixture({ kind: 'coach' }, false);
     const oldNodeEnv = process.env.NODE_ENV;
     process.env.NODE_ENV = 'development';
     try {
@@ -148,6 +149,17 @@ describe('authentication integration', () => {
       assert.equal(reused.status, 409);
       const login = await post('/api/login', { email: account.email, password });
       assert.equal(login.status, 200);
+
+      const coachIssued = await post('/api/dev/setup-token', { email: coach.email });
+      assert.equal(coachIssued.status, 200);
+      const coachToken = new URL((await coachIssued.json()).setup_url).searchParams.get('token');
+      assert.ok(coachToken);
+      const coachPassword = crypto.randomBytes(18).toString('base64url');
+      const coachRedeemed = await post('/api/dev/setup-password', { token: coachToken, password: coachPassword });
+      assert.equal(coachRedeemed.status, 200);
+      const coachLogin = await post('/api/login', { email: coach.email, password: coachPassword });
+      assert.equal(coachLogin.status, 200);
+      assert.equal((await coachLogin.json()).kind, 'coach');
 
       const expiredToken = crypto.randomBytes(32).toString('base64url');
       await query(
