@@ -13,7 +13,6 @@ export function SessionCatalogue({
   sourcePath,
   title = 'SESSION CATALOGUE',
   bookingRole,
-  promotedOnly = false,
   showHeader = true,
   onOpen
 }: {
@@ -21,7 +20,6 @@ export function SessionCatalogue({
   sourcePath?: string;
   title?: string;
   bookingRole?: BookingRole;
-  promotedOnly?: boolean;
   showHeader?: boolean;
   onOpen?: (sessionId: number) => void;
 }) {

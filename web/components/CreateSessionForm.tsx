@@ -4,9 +4,9 @@ import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { fetchJson } from '../lib/api';
 import { useCurrentUser } from './CurrentUserProvider';
+import { DISCIPLINES } from '../../api/src/credits';
 import type { Person, Room } from '../lib/types';
 
-const disciplines = ['fitness', 'lifestyle', 'financial', 'nutrition', 'career', 'mindfulness'];
 const sessionTypes = ['short', 'standard', 'intensive'];
 
 export function CreateSessionForm() {
@@ -20,7 +20,7 @@ export function CreateSessionForm() {
   const [date, setDate] = useState('');
   const [startTime, setStartTime] = useState('');
   const [endTime, setEndTime] = useState('');
-  const [discipline, setDiscipline] = useState(disciplines[0]);
+  const [discipline, setDiscipline] = useState<string>(DISCIPLINES[0]);
   const [sessionType, setSessionType] = useState(sessionTypes[1]);
   const [roomId, setRoomId] = useState('');
   const [coachId, setCoachId] = useState('');
@@ -85,7 +85,7 @@ export function CreateSessionForm() {
           <label><span>Date</span><input required type="date" value={date} onChange={(event) => setDate(event.target.value)} /></label>
           <label><span>Starts</span><input required type="time" value={startTime} onChange={(event) => setStartTime(event.target.value)} /></label>
           <label><span>Ends</span><input required type="time" value={endTime} onChange={(event) => setEndTime(event.target.value)} /></label>
-          <label><span>Discipline</span><input required value={discipline} onChange={(event) => setDiscipline(event.target.value)} /></label>
+          <label><span>Discipline</span><select required value={discipline} onChange={(event) => setDiscipline(event.target.value)}>{DISCIPLINES.map((value) => <option key={value}>{value}</option>)}</select></label>
           <label><span>Type</span><select value={sessionType} onChange={(event) => setSessionType(event.target.value)}>{sessionTypes.map((value) => <option key={value}>{value}</option>)}</select></label>
           <label><span>Room</span><select required value={roomId} onChange={(event) => setRoomId(event.target.value)}><option value="">Select room</option>{rooms.map((room) => <option key={room.id} value={room.id}>{room.name} / {room.capacity}</option>)}</select></label>
           {user?.kind === 'admin' && <label><span>Coach</span><select required value={coachId} onChange={(event) => setCoachId(event.target.value)}><option value="">Select coach</option>{coaches.map((coach) => <option key={coach.id} value={coach.id}>{coach.full_name}</option>)}</select></label>}

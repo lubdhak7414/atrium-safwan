@@ -15,11 +15,11 @@ export default async function HomePage() {
   let error = '';
   try {
     promoted = await fetchJson<Session[]>(
-      `/api/sessions?from=${encodeURIComponent(toApiIso(from))}&to=${encodeURIComponent(toApiIso(to))}&promoted=true`,
+      `/api/sessions?from=${encodeURIComponent(toApiIso(from))}&to=${encodeURIComponent(toApiIso(to))}&catalogue=true`,
       { cache: 'no-store' }
     );
   } catch (cause) {
-    error = cause instanceof Error ? cause.message : 'Could not load promoted sessions';
+    error = cause instanceof Error ? cause.message : 'Could not load upcoming sessions';
   }
 
   return (
@@ -37,11 +37,11 @@ export default async function HomePage() {
         <AccountOverview />
       </div>
 
-       <section className="home-section featured-panel" aria-labelledby="promoted-title">
-          <div className="card-heading"><div><h2 id="promoted-title">FEATURED COACHING SESSIONS</h2><p className="muted">Explore upcoming sessions and find your next place to learn.</p></div></div>
+        <section className="home-section featured-panel" aria-labelledby="promoted-title">
+          <div className="card-heading"><div><h2 id="promoted-title">UPCOMING COACHING SESSIONS</h2><p className="muted">Explore upcoming sessions and find your next place to learn.</p></div></div>
           {error && <p className="error-line">{error}</p>}
-          {!error && promoted.length === 0 && <p className="featured-empty">No featured sessions right now. <Link href="/catalogue">Browse all upcoming sessions</Link> to find your next class.</p>}
-          {!error && promoted.length > 0 && <SessionCatalogue initialSessions={promoted} title="FEATURED SESSIONS" showHeader={false} />}
+          {!error && promoted.length === 0 && <p className="featured-empty">No upcoming sessions right now. <Link href="/catalogue">Browse the catalogue</Link> to find your next class.</p>}
+          {!error && promoted.length > 0 && <SessionCatalogue initialSessions={promoted} title="UPCOMING SESSIONS" showHeader={false} />}
         </section>
 
       <section className="dashboard-card home-section decision-panel" aria-labelledby="decision-title">

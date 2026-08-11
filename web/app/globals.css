@@ -178,6 +178,21 @@ h3 { margin-bottom: var(--s3); line-height: 18px; }
 .assistant-data-key { color: var(--ink-soft); font-family: var(--font-mono), monospace; font-size: 11px; }
 .assistant-signin { margin-bottom: 0; }
 .assistant-signin a { font-weight: 600; }
+.assistant-chat { display: grid; gap: var(--s3); max-height: 480px; overflow-y: auto; margin-bottom: var(--s5); padding-right: var(--s2); }
+.chat-row { display: flex; }
+.chat-row.chat-user { justify-content: flex-end; }
+.chat-row.chat-assistant, .chat-row.chat-error { justify-content: flex-start; }
+.chat-bubble { max-width: min(85%, 720px); padding: var(--s3) var(--s4); border-radius: 10px; overflow-wrap: anywhere; }
+.chat-user-bubble { background: var(--ink); color: var(--paper); }
+.chat-user-bubble p { margin: 0; }
+.chat-assistant-bubble { border: 1px solid var(--line); border-left: 3px solid var(--draft); background: var(--surface); }
+.chat-assistant-bubble p { margin-bottom: var(--s3); }
+.chat-assistant-bubble p:last-child { margin-bottom: 0; }
+.chat-assistant-bubble .assistant-data > p { margin-bottom: var(--s3); }
+.chat-error-bubble { border: 1px solid var(--line-strong); background: var(--paper-deep); }
+.chat-error-bubble p { margin-bottom: var(--s2); }
+.chat-error-bubble p:last-child { margin-bottom: 0; }
+.assistant-thinking { color: var(--ink-soft); font-size: 12px; letter-spacing: 0.05em; margin: 0; }
 .policy-page-grid { display: grid; gap: var(--s5); margin-top: var(--s5); }
 .policy-page-header { padding: 4px 0 0; }
 .policy-page-header h1 { margin-bottom: 4px; font-size: 28px; line-height: 34px; letter-spacing: -0.02em; }
@@ -241,6 +256,7 @@ tbody tr:hover { background: var(--paper-deep); }
 .filter-reset:hover { color: var(--paper); }
 .row-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2); min-width: 180px; }
 .row-actions button, .row-actions select, .detail-toggle button { padding: 6px 8px; min-height: 32px; font-size: 12px; }
+td button { padding: 4px 10px; min-height: 26px; font-size: 12px; white-space: nowrap; }
 .row-actions select { width: 130px; min-height: 32px; padding: 4px; }
 .action-error { flex-basis: 100%; color: var(--draft-deep); font-size: 12px; }
 .inline-form { display: flex; flex-wrap: wrap; gap: var(--s2); width: 100%; }

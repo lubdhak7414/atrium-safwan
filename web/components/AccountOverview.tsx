@@ -17,9 +17,17 @@ export function AccountOverview() {
       ) : user ? (
         <>
           <div className="credit-card account-credit">
-            <div><span className="credit-label">YOUR CREDITS</span><strong>{user.credits} <small>credits</small></strong><span className="muted">{user.full_name}</span></div>
+            <div><span className="credit-label">{user.kind === 'admin' ? 'ADMINISTRATOR' : 'YOUR CREDITS'}</span>{user.kind === 'admin' ? <strong>{user.full_name}</strong> : <strong>{user.credits} <small>credits</small></strong>}<span className="muted">{user.kind === 'admin' ? 'Full centre access' : user.full_name}</span></div>
           </div>
-          <Link className="card-link primary-card-link" href="/catalogue">Book sessions</Link>
+          {user.kind === 'admin' ? (
+            <>
+              <Link className="card-link primary-card-link" href="/admin">Open admin dashboard</Link>
+              <Link className="card-link" href="/admin/sessions">Session calendar</Link>
+              <Link className="card-link" href="/admin/people">People directory</Link>
+            </>
+          ) : (
+            <Link className="card-link primary-card-link" href={user.kind === 'coach' ? '/coach' : '/catalogue'}>{user.kind === 'coach' ? 'Manage my sessions' : 'Book sessions'}</Link>
+          )}
         </>
       ) : (
         <>

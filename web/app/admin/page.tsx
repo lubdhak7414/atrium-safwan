@@ -6,7 +6,6 @@ import { RoleGuard } from '../../components/RoleGuard';
 import { fetchJson } from '../../lib/api';
 import { startOfCentreWeek, toApiIso } from '../../lib/time';
 import type { Person, Room, Session } from '../../lib/types';
-import { PromotionManager } from '../../components/PromotionManager';
 
 export default function AdminDashboard() {
   return (
@@ -63,7 +62,6 @@ function AdminWorkspace() {
             <Link className="button-link" href="/admin/sessions">OPEN SESSION CALENDAR</Link>{' '}
             <Link className="button-link" href="/create">CREATE SESSION</Link>
           </section>
-          <PromotionManager />
           <section className="data-panel action-panel">
             <h2>ACCOUNT MANAGEMENT</h2>
             <p>Manage every record: deactivate accounts and send single-use password reset emails.</p>

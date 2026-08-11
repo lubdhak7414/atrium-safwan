@@ -64,7 +64,6 @@ export default function Login() {
       <section className="form-panel">
         <p className="eyebrow">ACCOUNT ACCESS</p>
         <h2>Sign in to the operational desk</h2>
-        <p className="muted">The same form is used by participants, coaches, and administrators. Your account role determines the workspace you enter.</p>
         <form onSubmit={onSubmit}>
           <label>
             <span>Email</span>

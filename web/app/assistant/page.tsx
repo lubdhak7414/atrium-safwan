@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { fetchJson, ApiError, isRecord } from '../../lib/api';
 
@@ -8,6 +8,11 @@ type AssistantResponse = {
   reply: string;
   data?: unknown;
 };
+
+type Message =
+  | { role: 'user'; text: string }
+  | { role: 'assistant'; reply: string; data?: unknown }
+  | { role: 'error'; text: string; unauthorized?: boolean };
 
 function ScalarPairs({ value }: { value: unknown }) {
   if (!isRecord(value)) return null;
@@ -58,34 +63,37 @@ function DataSummary({ data }: { data: unknown }) {
 }
 
 export default function AssistantPage() {
-  const [message, setMessage] = useState('');
-  const [answer, setAnswer] = useState<AssistantResponse | null>(null);
-  const [state, setState] = useState<'empty' | 'loading' | 'ready' | 'error'>('empty');
-  const [error, setError] = useState('');
-  const [unauthorized, setUnauthorized] = useState(false);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [input, setInput] = useState('');
+  const [pending, setPending] = useState(false);
+  const bottomRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+  }, [messages, pending]);
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!message.trim() || state === 'loading') return;
-    setState('loading');
-    setError('');
-    setUnauthorized(false);
+    const text = input.trim();
+    if (!text || pending) return;
+    setInput('');
+    setMessages((current) => [...current, { role: 'user', text }]);
+    setPending(true);
     try {
       const result = await fetchJson<AssistantResponse>('/api/assistant', {
         method: 'POST',
         signal: AbortSignal.timeout(20000),
-        body: JSON.stringify({ message })
+        body: JSON.stringify({ message: text })
       });
-      setAnswer(result);
-      setState('ready');
+      setMessages((current) => [...current, { role: 'assistant', reply: result.reply, data: result.data }]);
     } catch (cause) {
-      if (cause instanceof DOMException && cause.name === 'TimeoutError') {
-        setError('The assistant took too long to respond. Try again.');
-      } else {
-        setUnauthorized(cause instanceof ApiError && cause.status === 401);
-        setError(cause instanceof Error ? cause.message : 'The assistant could not answer.');
-      }
-      setState('error');
+      const unauthorized = cause instanceof ApiError && cause.status === 401;
+      const message = cause instanceof DOMException && cause.name === 'TimeoutError'
+        ? 'The assistant took too long to respond. Try again.'
+        : cause instanceof Error ? cause.message : 'The assistant could not answer.';
+      setMessages((current) => [...current, { role: 'error', text: message, unauthorized }]);
+    } finally {
+      setPending(false);
     }
   }
 
@@ -98,28 +106,34 @@ export default function AssistantPage() {
       </section>
       <section className="assistant-panel" aria-labelledby="assistant-title">
         <div className="card-heading">
-          <div><h2 id="assistant-title">WHAT DO YOU NEED?</h2><p className="muted">Try “show upcoming sessions” or “how many credits do I have?”</p></div>
+          <div><h2 id="assistant-title">CHAT WITH ATRIUM</h2><p className="muted">Try “show upcoming sessions” or “how many credits do I have?”</p></div>
+        </div>
+        <div className="assistant-chat" aria-live="polite">
+          {messages.length === 0 && !pending && <p className="state-line">Start the conversation — ask about sessions, a booking, or your balance.</p>}
+          {messages.map((message, index) => (
+            <div key={index} className={`chat-row chat-${message.role}`}>
+              {message.role === 'user' && <div className="chat-bubble chat-user-bubble"><p>{message.text}</p></div>}
+              {message.role === 'assistant' && (
+                <div className="chat-bubble chat-assistant-bubble">
+                  <p>{message.reply}</p>
+                  <DataSummary data={message.data} />
+                </div>
+              )}
+              {message.role === 'error' && (
+                <div className="chat-bubble chat-error-bubble" role="alert">
+                  <p>{message.text}</p>
+                  {message.unauthorized && <p className="assistant-signin"><Link href="/login">Sign in</Link> to unlock your credits, bookings, and coaching actions.</p>}
+                </div>
+              )}
+            </div>
+          ))}
+          {pending && <div className="chat-row chat-assistant"><div className="chat-bubble chat-assistant-bubble"><p className="assistant-thinking">CHECKING YOUR REQUEST...</p></div></div>}
+          <div ref={bottomRef} />
         </div>
         <form className="assistant-form" onSubmit={submit}>
-          <label><span>Your request</span><textarea value={message} onChange={(event) => setMessage(event.target.value)} placeholder="Ask Atrium..." rows={4} disabled={state === 'loading'} /></label>
-          <button type="submit" className={state === 'loading' ? 'is-loading' : ''} disabled={state === 'loading' || !message.trim()}>{state === 'loading' ? 'Thinking...' : 'Ask assistant'}</button>
+          <label><span>Your message</span><textarea value={input} onChange={(event) => setInput(event.target.value)} placeholder="Ask Atrium..." rows={3} disabled={pending} /></label>
+          <button type="submit" className={pending ? 'is-loading' : ''} disabled={pending || !input.trim()}>{pending ? 'Thinking...' : 'Send'}</button>
         </form>
-        <div className="assistant-status" aria-live="polite">
-          {state === 'empty' && <p className="state-line">Your answer will appear here.</p>}
-          {state === 'loading' && <p className="state-line">CHECKING YOUR REQUEST...</p>}
-          {state === 'error' && (
-            <div className="error-line" role="alert">
-              <p>{error}</p>
-              {unauthorized && <p className="assistant-signin"><Link href="/login">Sign in</Link> to unlock your credits, bookings, and coaching actions.</p>}
-            </div>
-          )}
-          {state === 'ready' && answer && (
-            <div className="assistant-answer">
-              <p>{answer.reply}</p>
-              <DataSummary data={answer.data} />
-            </div>
-          )}
-        </div>
       </section>
     </main>
   );
