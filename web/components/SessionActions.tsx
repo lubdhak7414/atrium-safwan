@@ -2,13 +2,13 @@
 
 import { useEffect, useState } from 'react';
 import { fetchJson } from '../lib/api';
-import type { Room, Session } from '../lib/types';
+import type { Person, Room, Session } from '../lib/types';
 
 export function BookingActions({ session, sessions, onChanged }: { session: Session; sessions: Session[]; onChanged: () => void }) {
   const [destination, setDestination] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const alternatives = sessions.filter((candidate) => candidate.id !== session.id && (candidate.places_remaining ?? 0) > 0);
+  const alternatives = sessions.filter((candidate) => candidate.id !== session.id && !candidate.my_enrolment && (candidate.places_remaining ?? 0) > 0);
 
   async function run(path: string) {
     setBusy(true);
@@ -41,7 +41,7 @@ export function BookingActions({ session, sessions, onChanged }: { session: Sess
     <div className="row-actions">
       {session.my_enrolment ? <>
         <button type="button" disabled={busy} onClick={() => void run(`/api/enrolments/${session.my_enrolment!.id}/cancel`)}>CANCEL</button>
-        {alternatives.length > 0 && <><select aria-label={`Move booking ${session.id}`} value={destination} onChange={(event) => setDestination(event.target.value)}><option value="">Move to...</option>{alternatives.map((candidate) => <option key={candidate.id} value={candidate.id}>#{candidate.id} {candidate.discipline}</option>)}</select><button type="button" disabled={busy || !destination} onClick={() => void change()}>MOVE</button></>}
+        {alternatives.length > 0 && <><select aria-label={`Change booking ${session.id}`} value={destination} onChange={(event) => setDestination(event.target.value)}><option value="">Change booking to...</option>{alternatives.map((candidate) => <option key={candidate.id} value={candidate.id}>#{candidate.id} {candidate.discipline}</option>)}</select><button type="button" disabled={busy || !destination} onClick={() => void change()}>CHANGE BOOKING</button></>}
       </> : <button type="button" disabled={busy || (session.places_remaining ?? 0) <= 0} onClick={() => void run(`/api/sessions/${session.id}/enrol`)}>{(session.places_remaining ?? 0) <= 0 ? 'FULL' : 'BOOK'}</button>}
       {error && <span className="action-error" role="alert">{error}</span>}
     </div>
@@ -83,6 +83,57 @@ export function CoachSessionActions({ session, onChanged }: { session: Session; 
       <button type="button" disabled={busy} onClick={() => void request(`/api/sessions/${session.id}/complete`)}>COMPLETE</button>
       <button type="button" disabled={busy} onClick={() => setShowReschedule((value) => !value)}>RESCHEDULE</button>
       {showReschedule && <form className="inline-form" onSubmit={(event) => { event.preventDefault(); void request(`/api/sessions/${session.id}/reschedule`, { room_id: Number(roomId), local_date: date, local_start_time: startTime, local_end_time: endTime }); }}><select required value={roomId} onChange={(event) => setRoomId(event.target.value)}><option value="">Room</option>{rooms.map((room) => <option key={room.id} value={room.id}>{room.name}</option>)}</select><input required type="date" value={date} onChange={(event) => setDate(event.target.value)} /><input required type="time" value={startTime} onChange={(event) => setStartTime(event.target.value)} /><input required type="time" value={endTime} onChange={(event) => setEndTime(event.target.value)} /><button type="submit" disabled={busy}>SAVE</button></form>}
+      {error && <span className="action-error" role="alert">{error}</span>}
+    </div>
+  );
+}
+
+export function AdminSessionActions({ session, onChanged }: { session: Session; onChanged: () => void }) {
+  const [showReschedule, setShowReschedule] = useState(false);
+  const [rooms, setRooms] = useState<Room[]>([]);
+  const [roomId, setRoomId] = useState(String(session.room_id));
+  const [date, setDate] = useState('');
+  const [startTime, setStartTime] = useState('');
+  const [endTime, setEndTime] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [showReassign, setShowReassign] = useState(false);
+  const [coaches, setCoaches] = useState<Person[]>([]);
+  const [coachId, setCoachId] = useState('');
+
+  useEffect(() => {
+    if (!showReschedule || rooms.length > 0) return;
+    fetchJson<Room[]>('/api/rooms').then(setRooms).catch((cause: Error) => setError(cause.message));
+  }, [rooms.length, showReschedule]);
+
+  useEffect(() => {
+    if (!showReassign || coaches.length > 0) return;
+    fetchJson<Person[]>('/api/people?kind=coach').then(setCoaches).catch((cause: Error) => setError(cause.message));
+  }, [coaches.length, showReassign]);
+
+  async function request(path: string, body: Record<string, unknown> = {}) {
+    setBusy(true);
+    setError('');
+    try {
+      await fetchJson(path, { method: 'POST', body: JSON.stringify(body) });
+      onChanged();
+      setShowReschedule(false);
+      setShowReassign(false);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Session action failed');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="row-actions">
+      <button type="button" disabled={busy} onClick={() => void request(`/api/sessions/${session.id}/cancel`)}>CANCEL SESSION</button>
+      <button type="button" disabled={busy} onClick={() => void request(`/api/sessions/${session.id}/complete`)}>COMPLETE</button>
+      <button type="button" disabled={busy} onClick={() => setShowReschedule((value) => !value)}>RESCHEDULE</button>
+      <button type="button" disabled={busy} onClick={() => setShowReassign((value) => !value)}>REASSIGN COACH</button>
+      {showReschedule && <form className="inline-form" onSubmit={(event) => { event.preventDefault(); void request(`/api/sessions/${session.id}/reschedule`, { room_id: Number(roomId), local_date: date, local_start_time: startTime, local_end_time: endTime }); }}><select required value={roomId} onChange={(event) => setRoomId(event.target.value)}><option value="">Room</option>{rooms.map((room) => <option key={room.id} value={room.id}>{room.name}</option>)}</select><input required type="date" value={date} onChange={(event) => setDate(event.target.value)} /><input required type="time" value={startTime} onChange={(event) => setStartTime(event.target.value)} /><input required type="time" value={endTime} onChange={(event) => setEndTime(event.target.value)} /><button type="submit" disabled={busy}>SAVE</button></form>}
+      {showReassign && <form className="inline-form" onSubmit={(event) => { event.preventDefault(); void request(`/api/sessions/${session.id}/reassign`, { coach_id: Number(coachId) }); }}><select required value={coachId} onChange={(event) => setCoachId(event.target.value)}><option value="">Coach</option>{coaches.map((coach) => <option key={coach.id} value={coach.id}>{coach.full_name}</option>)}</select><button type="submit" disabled={busy}>SAVE</button></form>}
       {error && <span className="action-error" role="alert">{error}</span>}
     </div>
   );

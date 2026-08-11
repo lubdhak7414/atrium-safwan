@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { RoleGuard } from '../../components/RoleGuard';
-import { TitleBlock } from '../../components/TitleBlock';
 import { fetchJson } from '../../lib/api';
 import { startOfCentreWeek, toApiIso } from '../../lib/time';
 import type { Person, Room, Session } from '../../lib/types';
@@ -49,7 +48,6 @@ function AdminWorkspace() {
 
   return (
     <main className="page-shell">
-      <TitleBlock title="Administrator dashboard" meta="CONTROL DESK / COMPLETE CENTRE VIEW" />
       {state === 'loading' && <p className="state-line">LOADING OPERATIONS...</p>}
       {state === 'error' && <p className="error-line">{error}</p>}
       {state === 'ready' && (
@@ -66,6 +64,30 @@ function AdminWorkspace() {
             <Link className="button-link" href="/create">CREATE SESSION</Link>
           </section>
           <PromotionManager />
+          <section className="data-panel action-panel" aria-labelledby="directory-title">
+            <div className="section-heading">
+              <div>
+                <h2 id="directory-title">PEOPLE DIRECTORY</h2>
+                <p className="muted">Every record in the centre, administrator view.</p>
+              </div>
+              <span className="mono">{people.length} PEOPLE</span>
+            </div>
+            <div className="table-scroll">
+              <table>
+                <thead><tr><th>ID</th><th>NAME</th><th>EMAIL</th><th>ROLE</th><th>CREDITS</th><th>ACTIVE</th></tr></thead>
+                <tbody>{people.map((person) => (
+                  <tr key={person.id}>
+                    <td className="mono">#{person.id}</td>
+                    <td>{person.full_name}</td>
+                    <td className="mono">{person.email}</td>
+                    <td className="mono">{person.kind.toUpperCase()}</td>
+                    <td className="mono">{person.credits ?? 0}</td>
+                    <td className="mono">{person.active === false ? 'NO' : 'YES'}</td>
+                  </tr>
+                ))}</tbody>
+              </table>
+            </div>
+          </section>
         </>
       )}
     </main>
