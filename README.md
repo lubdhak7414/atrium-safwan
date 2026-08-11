@@ -48,3 +48,44 @@ npm test
 Set a non-default `SESSION_SECRET` in `.env`. The API refuses to boot when it is missing or still set to `change-me`. New passwords use Argon2id; successful logins transparently upgrade legacy lowercase 64-character SHA-256 seed hashes. Login failures for unknown, inactive, and incorrect-password accounts use the same generic response. Sessions expire after 12 hours, reject future-issued cookies, use timing-safe MAC comparison, and reload the active person from PostgreSQL on every request.
 
 In local development, `POST /api/dev/setup-token` with a selected active seed email returns a loopback setup URL. Redeem it once with `POST /api/dev/setup-password`; only the token hash is stored, and token consumption and the Argon2id password update commit together. These routes require a loopback request and are disabled outside `NODE_ENV=development`. No coach or participant passwords are stored in the repository.
+
+## Local development accounts
+
+The seed migration (`001_init.sql`) stores legacy SHA-256 password hashes. Only the administrator credential is published:
+
+| Role | Email | Password |
+|---|---|---|
+| Administrator | `admin@atrium.local` | `admin` |
+
+Coach and participant seed passwords are intentionally not published and are not recoverable from their hashes. To log in as any other active seed account (for example a coach or a participant), set a password with the local setup-token flow:
+
+```text
+# One command per account (requires the API running in dev; Node 18+ only)
+node scripts/dev-passwords.mjs oscar.lindqvist@atrium.local your-password
+node scripts/dev-passwords.mjs sofia.marino@atrium.local your-password
+```
+
+Or step by step:
+
+```text
+# 1. Issue a one-time setup token for the account (loopback only, dev only)
+curl -X POST http://localhost:4000/api/dev/setup-token \
+  -H 'Content-Type: application/json' \
+  -d '{"email": "oscar.lindqvist@atrium.local"}'
+# -> {"setup_url":"http://localhost:4000/api/dev/setup-password?token=...","expires_at":"..."}
+
+# 2. Redeem it with the new password (single use, 30-minute expiry)
+curl -X POST 'http://localhost:4000/api/dev/setup-password?token=<TOKEN>' \
+  -H 'Content-Type: application/json' \
+  -d '{"password": "your-password"}'
+# -> {"password_set": true}
+```
+
+Suggested seed accounts for exercising the Phase 6 role-based UI:
+
+| Role | Email |
+|---|---|
+| Coach | `oscar.lindqvist@atrium.local` |
+| Participant | `sofia.marino@atrium.local` |
+
+After setting a password, sign in at `http://localhost:3000/login`; the app routes by role — participant → `/dashboard`, coach → `/coach`, admin → `/admin`.
