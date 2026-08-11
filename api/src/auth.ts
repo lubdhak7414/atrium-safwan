@@ -279,11 +279,6 @@ export async function issueSetupToken(req: Request, res: Response): Promise<void
 }
 
 export async function setupPasswordInfo(req: Request, res: Response): Promise<void> {
-  if (!isLocalhostRequest(req)) {
-    res.status(404).json({ error: 'not found' });
-    return;
-  }
-
   const queryInput = parseRequest(redeemQuerySchema, req.query, res);
   if (!queryInput) return;
   const { token } = queryInput;
@@ -314,11 +309,6 @@ export async function setupPasswordInfo(req: Request, res: Response): Promise<vo
 }
 
 export async function redeemSetupToken(req: Request, res: Response): Promise<void> {
-  if (!isLocalhostRequest(req)) {
-    res.status(404).json({ error: 'not found' });
-    return;
-  }
-
   const body = parseRequest(redeemBodySchema, req.body, res);
   if (body === null) return;
   const queryInput = parseRequest(redeemQuerySchema, req.query, res);
@@ -331,6 +321,11 @@ export async function redeemSetupToken(req: Request, res: Response): Promise<voi
   }
 
   try {
+    const valid = await query('select 1 from password_setup_token where token_hash = $1 and consumed_at is null and expires_at > now()', [tokenHash(token)]);
+    if (valid.length === 0) {
+      res.status(409).json({ error: SETUP_FAILURE });
+      return;
+    }
     const passwordHash = await hashPassword(password);
     await withTransaction(async (client) => {
       const consumed = await client.query<{ person_id: number }>(

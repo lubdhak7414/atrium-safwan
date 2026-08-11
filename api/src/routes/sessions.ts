@@ -4,6 +4,7 @@ import { requireRole, requireSession, optionalSession } from '../auth';
 import { parseRequest } from '../validation';
 import { query } from '../db';
 import { getSessionForCaller, listSessionsForCaller } from '../permissions';
+import { DISCIPLINES } from '../credits';
 import {
   cancelSession,
   checkIn,
@@ -34,7 +35,7 @@ const promotionSchema = z.object({
 const createSessionSchema = z.object({
   room_id: z.number().int().positive(),
   coach_id: z.number().int().positive().optional(),
-  discipline: z.string().trim().min(1).max(100),
+  discipline: z.enum(DISCIPLINES),
   session_type: z.enum(['short', 'standard', 'intensive']),
   local_date: localDateSchema,
   local_start_time: localTimeSchema,

@@ -102,9 +102,16 @@ async function executeTool(call: ToolCall, caller: Caller | undefined): Promise<
   const input = call.input;
   switch (call.name) {
     case 'search_sessions': {
-      const from = new Date().toISOString();
+      const from = caller?.kind === 'coach' ? new Date(0).toISOString() : new Date().toISOString();
       const to = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
-      return { sessions: await listSessionsForCaller(caller, from, to, undefined, false) };
+      const sessions = await listSessionsForCaller(caller, from, to, undefined, false);
+      if (caller?.kind !== 'coach') return { sessions };
+      const ownSessions = sessions.filter((session) => session.is_own_session === true);
+      const details = await Promise.all(ownSessions.map(async (session) => ({
+        id: session.id,
+        detail: await getSessionForCaller(Number(session.id), caller)
+      })));
+      return { sessions, own_session_details: details };
     }
     case 'book_session': {
       const sessionId = numberInput(input, 'session_id');

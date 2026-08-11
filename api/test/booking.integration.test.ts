@@ -177,7 +177,7 @@ describe('booking engine integration', () => {
     const shortSession = await request('/api/sessions', post({
       room_id: data.sourceRoomId,
       coach_id: data.replacementCoach.id,
-      discipline: 'short-created',
+      discipline: 'fitness',
       session_type: 'short',
       local_date: '2030-01-22',
       local_start_time: '10:00',
@@ -190,7 +190,7 @@ describe('booking engine integration', () => {
     const standardSession = await request('/api/sessions', post({
       room_id: data.sourceRoomId,
       coach_id: data.replacementCoach.id,
-      discipline: 'standard-created',
+      discipline: 'mindfulness',
       session_type: 'standard',
       local_date: '2030-01-22',
       local_start_time: '10:45',
@@ -201,7 +201,7 @@ describe('booking engine integration', () => {
     const intensiveSession = await request('/api/sessions', post({
       room_id: data.destinationRoomId,
       coach_id: data.replacementCoach.id,
-      discipline: 'intensive-created',
+      discipline: 'financial',
       session_type: 'intensive',
       local_date: '2030-01-23',
       local_start_time: '10:00',
@@ -228,7 +228,7 @@ describe('booking engine integration', () => {
     const touching = await request('/api/sessions', post({
       room_id: data.sourceRoomId,
       coach_id: data.replacementCoach.id,
-      discipline: 'touching',
+      discipline: 'lifestyle',
       session_type: 'standard',
       local_date: '2030-01-15',
       local_start_time: '11:00',
@@ -238,7 +238,7 @@ describe('booking engine integration', () => {
     const oneMinuteOverlap = await request('/api/sessions', post({
       room_id: data.sourceRoomId,
       coach_id: data.replacementCoach.id,
-      discipline: 'one-minute-overlap',
+      discipline: 'career',
       session_type: 'standard',
       local_date: '2030-01-15',
       local_start_time: '10:59',
@@ -260,8 +260,8 @@ describe('booking engine integration', () => {
       local_end_time: '11:00'
     });
     const results = await Promise.all([
-      request('/api/sessions', body(data.coach.id, 'room-race-a'), adminCookie),
-      request('/api/sessions', body(data.replacementCoach.id, 'room-race-b'), adminCookie)
+      request('/api/sessions', body(data.coach.id, 'fitness'), adminCookie),
+      request('/api/sessions', body(data.replacementCoach.id, 'lifestyle'), adminCookie)
     ]);
     assert.deepEqual(results.map((response) => response.status).sort(), [201, 409]);
   });
@@ -399,7 +399,7 @@ describe('booking engine integration', () => {
     const replacement = await request('/api/sessions', post({
       room_id: data.sourceRoomId,
       coach_id: data.coach.id,
-      discipline: 'replacement',
+      discipline: 'nutrition',
       session_type: 'standard',
       local_date: '2030-01-15',
       local_start_time: '10:00',

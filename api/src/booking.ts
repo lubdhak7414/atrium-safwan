@@ -366,7 +366,7 @@ const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export async function enrolAnonymous(input: AnonymousBookingInput): Promise<{ status: 'received' }> {
   const email = input.email.trim().toLowerCase();
-  const fullName = input.fullName.trim();
+  const fullName = input.fullName.trim() || email.slice(0, email.indexOf('@'));
   if (!EMAIL_PATTERN.test(email) || email.length > 254 || !fullName || fullName.length > 120) {
     badRequest('a valid email and full name are required');
   }

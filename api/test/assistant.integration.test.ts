@@ -180,13 +180,13 @@ describe('assistant integration', () => {
       input: { session_id: data.sessionId, email: 'not-an-email', full_name: 'Probe' }
     });
     assert.equal(missingAt.status, 400);
-    const missingName = await assistant({
+    const emailOnly = await assistant({
       message: `book session ${data.sessionId}`,
       tool: 'book_session',
       input: { session_id: data.sessionId, email: `${crypto.randomUUID()}@valid.local`, full_name: '' }
     });
-    assert.equal(missingName.status, 400);
-    assert.equal((await query('select count(*)::text as count from person'))[0].count, '3');
+    assert.equal(emailOnly.status, 200);
+    assert.equal((await query('select count(*)::text as count from person'))[0].count, '4');
   });
 
   test('the anonymous setup email carries the one-time setup URL', async () => {

@@ -189,7 +189,7 @@ describe('access-control integration', () => {
       body: JSON.stringify({
         room_id: 3,
         coach_id: data.coach.id,
-        discipline: 'should-not-create',
+        discipline: 'fitness',
         session_type: 'standard',
          local_date: '2030-02-01',
          local_start_time: '10:00',
@@ -205,7 +205,7 @@ describe('access-control integration', () => {
       body: JSON.stringify({
         room_id: 3,
         coach_id: data.otherCoach.id,
-        discipline: 'wrong-identity',
+        discipline: 'mindfulness',
         session_type: 'standard',
          local_date: '2030-02-01',
          local_start_time: '15:00',
@@ -219,7 +219,7 @@ describe('access-control integration', () => {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         room_id: 3,
-        discipline: 'caller-owned',
+        discipline: 'financial',
         session_type: 'standard',
          local_date: '2030-02-02',
          local_start_time: '15:00',
@@ -234,7 +234,7 @@ describe('access-control integration', () => {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
          room_id: 3,
-         discipline: 'coach-overlap',
+         discipline: 'lifestyle',
          session_type: 'standard',
          local_date: '2030-01-15',
          local_start_time: '10:00',
@@ -249,7 +249,7 @@ describe('access-control integration', () => {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         room_id: 3,
-        discipline: 'too-soon',
+        discipline: 'career',
         session_type: 'standard',
          local_date: tooSoonStart.toISOString().slice(0, 10),
          local_start_time: '12:00',
@@ -263,7 +263,7 @@ describe('access-control integration', () => {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         room_id: 3,
-        discipline: 'bad-hours',
+        discipline: 'nutrition',
         session_type: 'standard',
          local_date: '2030-02-03',
          local_start_time: '03:00',
@@ -277,7 +277,7 @@ describe('access-control integration', () => {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         room_id: 3,
-        discipline: 'backwards',
+        discipline: 'fitness',
         session_type: 'standard',
          local_date: '2030-02-04',
          local_start_time: '15:00',
@@ -292,7 +292,7 @@ describe('access-control integration', () => {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         room_id: 3,
-        discipline: 'insufficient-credits',
+        discipline: 'lifestyle',
         session_type: 'standard',
          local_date: '2030-02-05',
          local_start_time: '15:00',
@@ -300,7 +300,7 @@ describe('access-control integration', () => {
       })
     }, coachCookie);
     assert.equal(insufficient.status, 409);
-    const rolledBack = await query('select id from session where discipline = $1', ['insufficient-credits']);
+    const rolledBack = await query('select id from session where discipline = $1', ['lifestyle']);
     assert.equal(rolledBack.length, 0);
 
     const patchResponse = await request(`/api/sessions/${data.sessionId}`, {

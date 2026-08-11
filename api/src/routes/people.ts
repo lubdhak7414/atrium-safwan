@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { requireRole, requireSession, createSetupTokenForPerson } from '../auth';
+import { requireRole, requireSession, createSetupTokenForClient } from '../auth';
 import { withTransaction, query } from '../db';
 import { listPeopleForCaller } from '../permissions';
 import { parseRequest } from '../validation';
@@ -79,7 +79,7 @@ router.post('/:id/password-reset', requireSession, requireRole('admin'), async (
 
     const webBase = process.env.WEB_BASE_URL || 'http://localhost:3000';
     const result = await withTransaction(async (client) => {
-      const { token, expiresAt } = await createSetupTokenForPerson(id);
+      const { token, expiresAt } = await createSetupTokenForClient(client, id);
       const setupUrl = `${webBase}/setup-password?token=${encodeURIComponent(token)}`;
       await client.query(
         `insert into email_outbox (event_key, event_type, recipient, subject, body)

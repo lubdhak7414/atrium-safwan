@@ -1,3 +1,5 @@
+export const DISCIPLINES = ['fitness', 'lifestyle', 'financial', 'nutrition', 'career', 'mindfulness'] as const;
+
 export const SESSION_FEE_SCHEDULE = {
   short: { room: 30, seat: 15, durationMinutes: 45 },
   standard: { room: 40, seat: 20, durationMinutes: 60 },
