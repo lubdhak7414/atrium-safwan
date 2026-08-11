@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { fetchJson, ApiError, isRecord } from '../../lib/api';
+import { formatCentreDate, formatCentreTime } from '../../lib/time';
 
 type AssistantResponse = {
   reply: string;
@@ -14,50 +15,43 @@ type Message =
   | { role: 'assistant'; reply: string; data?: unknown }
   | { role: 'error'; text: string; unauthorized?: boolean };
 
-function ScalarPairs({ value }: { value: unknown }) {
-  if (!isRecord(value)) return null;
-  const entries = Object.entries(value).filter(([, item]) => typeof item !== 'object');
-  if (entries.length === 0) return null;
-  return (
-    <dl className="assistant-data-pairs">
-      {entries.map(([key, item]) => (
-        <div key={key}><dt>{key}</dt><dd>{String(item)}</dd></div>
-      ))}
-    </dl>
-  );
-}
+const INTERNAL_KEYS = new Set(['id', 'session_id', 'enrolment_id', 'person_id', 'room_id', 'coach_id']);
 
-function SummaryRows({ value }: { value: unknown }) {
-  if (Array.isArray(value)) {
-    if (value.length === 0) return <p className="muted">No records to show.</p>;
-    return (
-      <div className="assistant-data">
-        {value.map((row, index) => (
-          <div className="assistant-data-row" key={index}>
-            {isRecord(row) ? <ScalarPairs value={row} /> : <p>{String(row)}</p>}
-          </div>
-        ))}
-      </div>
-    );
-  }
-  if (isRecord(value)) return <ScalarPairs value={value} />;
-  return <p className="muted">{String(value)}</p>;
+function rowText(row: Record<string, unknown>): string {
+  return Object.entries(row)
+    .filter(([key, value]) => !INTERNAL_KEYS.has(key) && typeof value !== 'object')
+    .map(([key, value]) => {
+      const text = String(value);
+      if (key === 'starts_at' || key === 'ends_at') return `${formatCentreDate(text)} ${formatCentreTime(text)}`;
+      return text;
+    })
+    .join(' · ');
 }
 
 function DataSummary({ data }: { data: unknown }) {
   if (!isRecord(data)) return null;
-  const sections = Object.entries(data).filter(([, value]) => typeof value === 'object');
   return (
     <>
-      {Object.entries(data).filter(([, value]) => typeof value !== 'object').map(([key, value]) => (
-        <p key={key}><span className="assistant-data-key">{key}:</span> {String(value)}</p>
-      ))}
-      {sections.map(([key, value]) => (
-        <section key={key}>
-          <h3 className="assistant-data-heading">{key}</h3>
-          <SummaryRows value={value} />
-        </section>
-      ))}
+      {Object.entries(data).map(([key, value]) => {
+        if (Array.isArray(value)) {
+          return (
+            <section key={key}>
+              <h3 className="assistant-data-heading">{key.replace(/_/g, ' ')}</h3>
+              <div className="assistant-data">
+                {value.length === 0
+                  ? <p className="muted">No records to show.</p>
+                  : value.map((row, index) => (
+                      <div className="assistant-data-row" key={index}>{isRecord(row) ? <p>{rowText(row)}</p> : <p>{String(row)}</p>}</div>
+                    ))}
+              </div>
+            </section>
+          );
+        }
+        if (isRecord(value)) {
+          return <div className="assistant-data-row" key={key}>{<p>{rowText(value)}</p>}</div>;
+        }
+        return null;
+      })}
     </>
   );
 }

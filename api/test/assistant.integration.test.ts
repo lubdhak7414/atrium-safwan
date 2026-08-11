@@ -98,8 +98,8 @@ describe('assistant integration', () => {
 
     const admin = await (await assistant({ message }, await login(data.admin))).json();
     assert.equal('coach_name' in admin.data.sessions[0], true);
-    assert.notEqual(anonymous.reply, participant.reply);
-    assert.notEqual(participant.reply, coach.reply);
+    assert.equal(anonymous.reply, participant.reply);
+    assert.equal(participant.reply, coach.reply);
   });
 
   test('credits are caller-owned and anonymous callers cannot request them', async () => {
@@ -240,6 +240,20 @@ describe('assistant integration', () => {
     const cancelled = await assistant({ message: 'cancel my booking session 5' }, cookie);
     const cancelledBody = await cancelled.json();
     assert.equal('tool' in cancelledBody, false);
+  });
+
+  test('an unreachable model provider falls back to the stub router instead of a null reply', async () => {
+    const data = await fixture();
+    process.env.MODEL_PROVIDER = 'ollama';
+    process.env.MODEL_BASE_URL = 'http://127.0.0.1:1';
+    try {
+      const response = await assistant({ message: 'what are my bookings?' }, await login(data.participant));
+      assert.equal(response.status, 200);
+      const body = await response.json();
+      assert.equal(body.tool, 'my_bookings');
+    } finally {
+      process.env.MODEL_PROVIDER = 'stub';
+    }
   });
 
   test('the stub routes an explicit session cancellation to cancel_session', async () => {

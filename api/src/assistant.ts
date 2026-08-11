@@ -58,6 +58,22 @@ function stubCall(message: string, requestedTool?: string, requestedInput: Recor
   return null;
 }
 
+const TOOL_DEFINITIONS = [
+  { type: 'function', function: { name: 'search_sessions', description: 'List upcoming sessions visible to the caller', parameters: { type: 'object', properties: {} } } },
+  { type: 'function', function: { name: 'my_bookings', description: 'The caller\'s own bookings', parameters: { type: 'object', properties: {} } } },
+  { type: 'function', function: { name: 'my_credits', description: 'The caller\'s credit balance', parameters: { type: 'object', properties: {} } } },
+  { type: 'function', function: { name: 'book_session', description: 'Book a place in a session', parameters: { type: 'object', properties: { session_id: { type: 'integer' }, email: { type: 'string' }, full_name: { type: 'string' } }, required: ['session_id'] } } },
+  { type: 'function', function: { name: 'cancel_booking', description: 'Cancel the caller\'s own booking', parameters: { type: 'object', properties: { enrolment_id: { type: 'integer' } }, required: ['enrolment_id'] } } },
+  { type: 'function', function: { name: 'change_booking', description: 'Move a booking to another session', parameters: { type: 'object', properties: { enrolment_id: { type: 'integer' }, destination_session_id: { type: 'integer' } }, required: ['enrolment_id', 'destination_session_id'] } } },
+  { type: 'function', function: { name: 'coach_session_detail', description: 'A coach\'s session with attendee detail', parameters: { type: 'object', properties: { session_id: { type: 'integer' } }, required: ['session_id'] } } },
+  { type: 'function', function: { name: 'cancel_session', description: 'Cancel a session the caller coaches', parameters: { type: 'object', properties: { session_id: { type: 'integer' } }, required: ['session_id'] } } },
+  { type: 'function', function: { name: 'reschedule_session', description: 'Move a session the caller coaches to another time and room', parameters: { type: 'object', properties: { session_id: { type: 'integer' }, room_id: { type: 'integer' }, local_date: { type: 'string' }, local_start_time: { type: 'string' }, local_end_time: { type: 'string' } }, required: ['session_id', 'room_id', 'local_date', 'local_start_time', 'local_end_time'] } } },
+  { type: 'function', function: { name: 'reassign_session', description: 'Reassign a session to another coach', parameters: { type: 'object', properties: { session_id: { type: 'integer' }, coach_id: { type: 'integer' } }, required: ['session_id', 'coach_id'] } } },
+  { type: 'function', function: { name: 'check_in', description: 'Check an attendee into a session', parameters: { type: 'object', properties: { session_id: { type: 'integer' }, enrolment_id: { type: 'integer' } }, required: ['session_id', 'enrolment_id'] } } },
+  { type: 'function', function: { name: 'admin_people', description: 'The people directory', parameters: { type: 'object', properties: { kind: { type: 'string' } } } } },
+  { type: 'function', function: { name: 'admin_sessions', description: 'All sessions', parameters: { type: 'object', properties: {} } } }
+] as const;
+
 async function ollamaCall(message: string): Promise<ToolCall | null> {
   try {
     const baseUrl = process.env.MODEL_BASE_URL || 'http://localhost:11434';
@@ -68,19 +84,25 @@ async function ollamaCall(message: string): Promise<ToolCall | null> {
       body: JSON.stringify({
         model,
         stream: false,
-        format: 'json',
         messages: [
-          { role: 'system', content: 'Return only JSON with keys tool and input. Choose one supported Atrium assistant tool or use null. Do not answer the user.' },
+          { role: 'system', content: 'Atrium assistant. Choose the tool the user needs, or call no tool. Never answer the user directly.' },
           { role: 'user', content: message }
-        ]
+        ],
+        tools: TOOL_DEFINITIONS
       }),
-      signal: AbortSignal.timeout(15000)
+      signal: AbortSignal.timeout(30000)
     });
     if (!response.ok) throw new Error(`model provider returned ${response.status}`);
-    const payload = await response.json() as { message?: { content?: string } };
-    const parsed = JSON.parse(payload.message?.content || '{}') as { tool?: unknown; input?: Record<string, unknown> };
-    if (typeof parsed.tool !== 'string' || !parsed.tool) return null;
-    return { name: parsed.tool as ToolName, input: parsed.input ?? {} };
+    const payload = await response.json() as { message?: { tool_calls?: Array<{ function: { name: string; arguments: unknown } }> } };
+    const toolCall = payload.message?.tool_calls?.[0];
+    if (toolCall && typeof toolCall.function?.name === 'string' && toolCall.function.name) {
+      const input = toolCall.function.arguments;
+      return {
+        name: toolCall.function.name as ToolName,
+        input: typeof input === 'object' && input !== null ? input as Record<string, unknown> : {}
+      };
+    }
+    return null;
   } catch (error) {
     console.error('assistant model provider failed; falling back to the stub', error);
     return null;
@@ -155,14 +177,14 @@ export async function answerAssistant(message: string, caller: Caller | undefine
   const call = requestedTool
     ? stubCall(message, requestedTool, requestedInput)
     : provider === 'ollama'
-      ? await ollamaCall(message)
+      ? (await ollamaCall(message)) ?? stubCall(message)
       : stubCall(message);
   if (!call) return { reply: `${callerLabel(caller)} I can search upcoming sessions, report your credits or bookings, and help with a booking. Tell me what you need.` };
   const data = await executeTool(call, caller);
   const dataRecord = data as Record<string, unknown>;
-  if (call.name === 'my_credits') return { reply: `${callerLabel(caller)} Your current balance is ${dataRecord.credits} credits.`, tool: call.name, data };
-  if (call.name === 'search_sessions') return { reply: `${callerLabel(caller)} Here are the sessions visible to you.`, tool: call.name, data };
-  if (call.name === 'my_bookings') return { reply: `${callerLabel(caller)} Here are your bookings.`, tool: call.name, data };
+  if (call.name === 'my_credits') return { reply: `Your current balance is ${dataRecord.credits} credits.`, tool: call.name, data };
+  if (call.name === 'search_sessions') return { reply: 'Here are the sessions visible to you.', tool: call.name, data };
+  if (call.name === 'my_bookings') return { reply: 'Here are your bookings.', tool: call.name, data };
   if (call.name === 'book_session') return { reply: caller ? 'Your booking was processed.' : 'Your request was received.', tool: call.name, data };
   return { reply: 'The requested Atrium action was processed.', tool: call.name, data };
 }
