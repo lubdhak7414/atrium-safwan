@@ -16,13 +16,32 @@ function tierLabel(index: number, kind: 'coach' | 'participant'): string {
   return index === 0 ? '≥24H' : index === 1 ? '12–23H' : '<12H';
 }
 
+function pillClass(percentValue: number): string {
+  if (percentValue === 1) return 'full';
+  if (percentValue === 0) return 'zero';
+  return 'partial';
+}
+
+function RefundTiers({ tiers, kind }: { tiers: readonly { minimumHours: number; percent: number }[]; kind: 'coach' | 'participant' }) {
+  return (
+    <div className="policy-tier-list">
+      {tiers.map((tier, index) => (
+        <div className="policy-tier" key={tier.minimumHours}>
+          <span>{tierLabel(index, kind)} notice</span>
+          <strong className={`policy-pill ${pillClass(tier.percent)}`}>{percent(tier.percent)}</strong>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function PolicyMatrix() {
   return (
     <section className="policy-matrix" aria-labelledby="policy-title">
       <h2 id="policy-title">POLICY &amp; FEES</h2>
       <div className="policy-row">
         <span className="policy-label">ROOM HOLD</span>
-        <span className="policy-value">210 MIN FOR INTENSIVE (INCLUDES 30 MIN LUNCH)</span>
+        <span className="policy-value">INTENSIVE: 210 MINUTES</span>
       </div>
       <div className="policy-row">
         <span className="policy-label">OPEN HOURS</span>
@@ -32,27 +51,13 @@ export function PolicyMatrix() {
         <span className="policy-label">COACH DEADLINE</span>
         <span className="policy-value">BOOK OR RESCHEDULE AT LEAST 48 HOURS AHEAD</span>
       </div>
-      <div className="policy-row">
+      <div className="policy-row money-rule">
         <span className="policy-label">COACH REFUNDS</span>
-        <span className="policy-value">
-          {COACH_REFUND_TIERS.map((tier, index) => (
-            <span key={tier.minimumHours}>
-              {index > 0 ? ' | ' : ''}
-              {tierLabel(index, 'coach')} → {percent(tier.percent)}
-            </span>
-          ))}
-        </span>
+        <RefundTiers tiers={COACH_REFUND_TIERS} kind="coach" />
       </div>
-      <div className="policy-row">
+      <div className="policy-row money-rule">
         <span className="policy-label">PARTICIPANT REFUNDS</span>
-        <span className="policy-value">
-          {PARTICIPANT_REFUND_TIERS.map((tier, index) => (
-            <span key={tier.minimumHours}>
-              {index > 0 ? ' | ' : ''}
-              {tierLabel(index, 'participant')} → {percent(tier.percent)}
-            </span>
-          ))}
-        </span>
+        <RefundTiers tiers={PARTICIPANT_REFUND_TIERS} kind="participant" />
       </div>
       <div className="policy-row">
         <span className="policy-label">NEW ACCOUNT CREDIT</span>
@@ -60,9 +65,16 @@ export function PolicyMatrix() {
       </div>
       <div className="policy-row">
         <span className="policy-label">FEES / SESSION</span>
-        <span className="policy-value">
-          SHORT {SESSION_FEE_SCHEDULE.short.room}/{SESSION_FEE_SCHEDULE.short.seat} · STANDARD {SESSION_FEE_SCHEDULE.standard.room}/{SESSION_FEE_SCHEDULE.standard.seat} · INTENSIVE {SESSION_FEE_SCHEDULE.intensive.room}/{SESSION_FEE_SCHEDULE.intensive.seat}
-        </span>
+        <div className="policy-fee-list">
+          <span>SHORT <strong>{SESSION_FEE_SCHEDULE.short.room} / {SESSION_FEE_SCHEDULE.short.seat}</strong></span>
+          <span>STANDARD <strong>{SESSION_FEE_SCHEDULE.standard.room} / {SESSION_FEE_SCHEDULE.standard.seat}</strong></span>
+          <span>INTENSIVE <strong>{SESSION_FEE_SCHEDULE.intensive.room} / {SESSION_FEE_SCHEDULE.intensive.seat}</strong></span>
+          <small>ROOM / SEAT CREDITS</small>
+        </div>
+      </div>
+      <div className="policy-row">
+        <span className="policy-label">REFUND ROUNDING</span>
+        <span className="policy-value">HALF-UP: 25% OF 30 CREDITS BECOMES 8</span>
       </div>
     </section>
   );

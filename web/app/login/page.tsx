@@ -4,7 +4,6 @@ import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { fetchJson, ApiError } from '../../lib/api';
 import type { Role } from '../../lib/types';
-import { TitleBlock } from '../../components/TitleBlock';
 
 export default function Login() {
   const router = useRouter();
@@ -43,7 +42,6 @@ export default function Login() {
 
   return (
     <main className="page-shell narrow-shell">
-      <TitleBlock title="Unified sign in" meta="ONE ENTRY / ROLE RESOLVED BY ACCOUNT" />
       <section className="form-panel">
         <p className="eyebrow">ACCOUNT ACCESS</p>
         <h2>Sign in to the operational desk</h2>
