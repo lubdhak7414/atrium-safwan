@@ -82,7 +82,11 @@ async function materializeCoachDigest(client: PoolClient, reportDate: string): P
       'digest.coach',
       coach.email,
       `Coach digest for ${reportDate}`,
-      `Your sessions for ${reportDate}\n\n${lines.join('\n')}`
+      `Here is a summary of your sessions for ${reportDate}.
+
+${lines.join('\n')}
+
+If you have any questions, please contact the Atrium team.`
     );
   }
 }
@@ -127,7 +131,9 @@ async function materializeAdminDigest(client: PoolClient, reportDate: string): P
     : sessions.rows.map((session) =>
       `- ${formatCentreDateTime(session.starts_at)}: ${session.discipline}, ${session.status}, ${session.room_name}, coach ${session.coach_name}, ${session.enrolment_count} enrolment(s), ${session.cancelled_count} cancelled, ${session.check_in_count} check-in(s)`
     );
-  const body = `Administrator digest for ${reportDate}\n\n${lines.join('\n')}`;
+  const body = `Here is the daily summary of sessions for ${reportDate}.
+
+${lines.join('\n')}`;
   for (const admin of admins.rows) {
     await enqueueDigestEmail(
       client,

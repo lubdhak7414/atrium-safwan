@@ -9,7 +9,7 @@ import {
   roomFee,
   seatFee
 } from './credits';
-import { parseLocalSessionWindow } from './time';
+import { formatCentreDateTime, parseLocalSessionWindow } from './time';
 
 export class DomainError extends Error {
   constructor(public readonly status: number, message: string) {
@@ -241,7 +241,7 @@ export async function createSession(input: SessionInput, caller: Caller): Promis
   return withTransaction(async (client) => {
     const rooms = await lockRooms(client, [input.roomId]);
     const coaches = await client.query(
-      'select id, credits, kind, active from person where id = $1 for update',
+      'select id, credits, kind, active, full_name from person where id = $1 for update',
       [input.coachId]
     );
     if (coaches.rowCount === 0 || coaches.rows[0].kind !== 'coach' || !coaches.rows[0].active) {
@@ -288,8 +288,16 @@ export async function createSession(input: SessionInput, caller: Caller): Promis
       client,
       `session-created:${inserted.rows[0].id}`,
       'room.booked_by_coach',
-      'Room booked by coach',
-      `Session ${inserted.rows[0].id} was booked by coach ${input.coachId}.`
+      'New session booked',
+      `A new coaching session has been booked by ${coaches.rows[0].full_name}.
+
+Session ID: ${inserted.rows[0].id}
+Discipline: ${inserted.rows[0].discipline}
+Room: ${rooms[0].name}
+Starts: ${formatCentreDateTime(inserted.rows[0].starts_at)}
+Ends: ${formatCentreDateTime(inserted.rows[0].ends_at)}
+
+You can review the details in the Atrium admin dashboard.`
     );
     return inserted.rows[0];
   });
@@ -335,8 +343,10 @@ export async function enrolSession(sessionId: number, person: Caller): Promise<a
         `booking-created:${inserted.rows[0].id}`,
         'participant.booking.created',
         coach.rows[0].email,
-        'New participant booking',
-        `Participant ${person.id} booked session ${sessionId}.`
+        'New booking for your session',
+        `${person.full_name} has booked a place in your ${session.discipline} session.
+
+Session starts: ${formatCentreDateTime(session.starts_at)}`
       );
     }
     return inserted.rows[0];
@@ -393,8 +403,10 @@ export async function cancelBooking(enrolmentId: number, person: Caller): Promis
         `booking-change:${enrolmentId}:${cancelled.rows[0].booking_change_version}`,
         'participant.booking.cancelled',
         coach.rows[0].email,
-        'Participant booking cancelled',
-        `Participant ${person.id} cancelled booking ${enrolmentId}.`
+        'Booking cancelled',
+        `${person.full_name} has cancelled their booking for your ${session.rows[0].discipline} session.
+
+The session was scheduled for ${formatCentreDateTime(session.rows[0].starts_at)}.`
       );
     }
     return { id: enrolmentId, status: 'cancelled', refund_percent: percent, credits_refunded: refund };
@@ -479,8 +491,11 @@ export async function changeBooking(enrolmentId: number, destinationSessionId: n
         `booking-change:${enrolmentId}:${cancelled.rows[0].booking_change_version}`,
         'participant.booking.changed',
         coach.email,
-        'Participant booking changed',
-        `Participant ${person.id} moved booking ${enrolmentId} to session ${destination.id}.`
+        'Booking changed',
+        `${person.full_name} has moved their booking to a different session.
+
+Original session: ${oldSession.discipline} (${formatCentreDateTime(oldSession.starts_at)})
+New session: ${destination.discipline} (${formatCentreDateTime(destination.starts_at)})`
       );
     }
     return { old_enrolment: cancelled.rows[0], new_enrolment: inserted.rows[0], credits_refunded: refund };
@@ -531,15 +546,21 @@ export async function cancelSession(sessionId: number, caller: Caller): Promise<
       affectedPeople,
       `session-change:${sessionId}:${changeVersion}:session.cancelled`,
       'session.cancelled',
-      'Coaching session cancelled',
-      `Session ${sessionId} was cancelled.`
+      'Session cancelled',
+      `We're sorry to let you know that your ${session.discipline} session has been cancelled.
+
+The session was scheduled for ${formatCentreDateTime(session.starts_at)}.
+
+Any credits you paid for this session have been refunded to your account. If you have any questions, please reply to this email.`
     );
     await enqueueAdmins(
       client,
       `session-change:${sessionId}:${changeVersion}:session.cancelled`,
       'session.cancelled',
-      'Coaching session cancelled',
-      `Session ${sessionId} was cancelled.`
+      'Session cancelled',
+      `Session ${sessionId} (${session.discipline}) has been cancelled.
+
+It was scheduled for ${formatCentreDateTime(session.starts_at)}. Refunds have been issued to all enrolled participants and the coach's room fee.`
     );
     if (caller.kind === 'coach') {
       await enqueueAdmins(
@@ -547,7 +568,9 @@ export async function cancelSession(sessionId: number, caller: Caller): Promise<
         `session-change:${sessionId}:${changeVersion}:room.cancelled_by_coach`,
         'room.cancelled_by_coach',
         'Room booking cancelled',
-        `Room booking for session ${sessionId} was cancelled.`
+        `The room booking for session ${sessionId} (${session.discipline}) has been cancelled by the coach.
+
+It was scheduled for ${formatCentreDateTime(session.starts_at)}.`
       );
     }
     return { id: sessionId, status: 'cancelled', refund_percent: percent, room_fee_refunded: roomRefund, enrolments_cancelled: enrolments.rowCount, seat_fees_refunded: seatsRefunded };
@@ -610,8 +633,14 @@ export async function rescheduleSession(sessionId: number, input: RescheduleInpu
       coachAttendees.rows.map((row) => Number(row.person_id)),
       `session-change:${sessionId}:${updated.rows[0].change_version}:coach.attendee.session_changed`,
       'coach.attendee.session_changed',
-      'Attended session changed',
-      `Session ${sessionId} changed time or room.`
+      'Session rescheduled',
+      `A session you are attending has been rescheduled.
+
+Session: ${session.discipline}
+New time: ${formatCentreDateTime(updated.rows[0].starts_at)}
+Room: ${room.name}
+
+Please review your schedule in the Atrium app.`
     );
     return updated.rows[0];
   });
@@ -673,7 +702,24 @@ export async function reassignSession(sessionId: number, newCoachId: number, cal
         'coach.reassigned',
         oldCoach.rows[0].email,
         'Session reassigned',
-        `Session ${sessionId} was reassigned to another coach.`
+        `Session ${sessionId} (${session.discipline}) is no longer assigned to you.
+
+It was scheduled for ${formatCentreDateTime(session.starts_at)}. If you have any questions, please contact an administrator.`
+      );
+    }
+    const newCoachRow = await client.query('select email from person where id = $1', [newCoachId]);
+    if (newCoachRow.rowCount === 1) {
+      await enqueueEmail(
+        client,
+        `session-change:${sessionId}:${updated.rows[0].change_version}:coach.assigned`,
+        'coach.assigned',
+        newCoachRow.rows[0].email,
+        'Session assigned to you',
+        `You have been assigned to teach ${session.discipline} (session ${sessionId}).
+
+Time: ${formatCentreDateTime(session.starts_at)}
+
+Please review your schedule in the Atrium app.`
       );
     }
     return updated.rows[0];

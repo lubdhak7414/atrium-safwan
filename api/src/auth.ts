@@ -225,6 +225,16 @@ function tokenHash(token: string): string {
   return crypto.createHash('sha256').update(token).digest('hex');
 }
 
+export async function createSetupTokenForPerson(personId: number): Promise<{ token: string; expiresAt: Date }> {
+  const token = crypto.randomBytes(32).toString('base64url');
+  const expiresAt = new Date(Date.now() + SETUP_TOKEN_MAX_AGE_MS);
+  await query(
+    'insert into password_setup_token (token_hash, person_id, expires_at) values ($1, $2, $3)',
+    [tokenHash(token), personId, expiresAt]
+  );
+  return { token, expiresAt };
+}
+
 export async function issueSetupToken(req: Request, res: Response): Promise<void> {
   if (!isLocalhostRequest(req)) {
     res.status(404).json({ error: 'not found' });
@@ -236,8 +246,6 @@ export async function issueSetupToken(req: Request, res: Response): Promise<void
   const { email } = input;
 
   try {
-    const token = crypto.randomBytes(32).toString('base64url');
-    const expiresAt = new Date(Date.now() + SETUP_TOKEN_MAX_AGE_MS);
     const people = await query(
       'select id from person where email = $1 and active = true',
       [email]
@@ -247,19 +255,50 @@ export async function issueSetupToken(req: Request, res: Response): Promise<void
       return;
     }
 
-    await query(
-      'insert into password_setup_token (token_hash, person_id, expires_at) values ($1, $2, $3)',
-      [tokenHash(token), people[0].id, expiresAt]
-    );
-
-    const port = Number(process.env.API_PORT) || 4000;
+    const { token, expiresAt } = await createSetupTokenForPerson(people[0].id);
+    const webBase = process.env.WEB_BASE_URL || 'http://localhost:3000';
     res.json({
-      setup_url: `http://localhost:${port}/api/dev/setup-password?token=${encodeURIComponent(token)}`,
+      setup_url: `${webBase}/setup-password?token=${encodeURIComponent(token)}`,
       expires_at: expiresAt.toISOString()
     });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'could not issue a setup token' });
+  }
+}
+
+export async function setupPasswordInfo(req: Request, res: Response): Promise<void> {
+  if (!isLocalhostRequest(req)) {
+    res.status(404).json({ error: 'not found' });
+    return;
+  }
+
+  const queryInput = parseRequest(redeemQuerySchema, req.query, res);
+  if (!queryInput) return;
+  const { token } = queryInput;
+  if (!token) {
+    res.status(400).json({ error: 'token is required' });
+    return;
+  }
+
+  try {
+    const rows = await query<{ email: string }>(
+      `select p.email
+         from password_setup_token t
+         join person p on p.id = t.person_id
+        where t.token_hash = $1
+          and t.consumed_at is null
+          and t.expires_at > now()`,
+      [tokenHash(token)]
+    );
+    if (rows.length === 0) {
+      res.status(404).json({ error: SETUP_FAILURE });
+      return;
+    }
+    res.json({ email: rows[0].email });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'could not resolve the setup token' });
   }
 }
 

@@ -89,7 +89,7 @@ export class OutboxDispatcher {
       await pool.query(
         `update email_outbox
             set status = 'sent', sent_at = now(), lease_until = null, lease_token = null,
-                body = case when body like '%/api/dev/setup-password?token=%' then '[redacted]' else body end
+                body = case when body like '%/setup-password?token=%' then '[redacted]' else body end
           where id = $1 and status = 'processing' and lease_token = $2`,
         [row.id, row.lease_token]
       );
@@ -103,7 +103,7 @@ export class OutboxDispatcher {
                 lease_token = null,
                 last_error = $2,
                 failed_at = case when $3 = 'failed' then now() else failed_at end,
-                body = case when $3 = 'failed' and body like '%/api/dev/setup-password?token=%' then '[redacted]' else body end
+                body = case when $3 = 'failed' and body like '%/setup-password?token=%' then '[redacted]' else body end
           where id = $1 and status = 'processing' and lease_token = $5`,
         [row.id, errorText(error), terminal ? 'failed' : 'pending', terminal ? 0 : retryDelay(row.attempt_count), row.lease_token]
       );

@@ -47,7 +47,7 @@ npm test
 
 Set a non-default `SESSION_SECRET` in `.env`. The API refuses to boot when it is missing or still set to `change-me`. New passwords use Argon2id; successful logins transparently upgrade legacy lowercase 64-character SHA-256 seed hashes. Login failures for unknown, inactive, and incorrect-password accounts use the same generic response. Sessions expire after 12 hours, reject future-issued cookies, use timing-safe MAC comparison, and reload the active person from PostgreSQL on every request.
 
-In local development, `POST /api/dev/setup-token` with a selected active seed email returns a loopback setup URL. Redeem it once with `POST /api/dev/setup-password`; only the token hash is stored, and token consumption and the Argon2id password update commit together. These routes require a loopback request and are disabled outside `NODE_ENV=development`. No coach or participant passwords are stored in the repository.
+In local development, `POST /api/dev/setup-token` with a selected active seed email returns a single-use setup URL on the web app (`http://localhost:3000/setup-password?token=...`) that shows the account and asks for a new password and a confirmation. Redeeming it (via the page or `POST /api/dev/setup-password`) stores only the token hash, and token consumption and the Argon2id password update commit together. These routes require a loopback request and are disabled outside `NODE_ENV=development`. No coach or participant passwords are stored in the repository.
 
 ## Local development accounts
 
@@ -72,9 +72,11 @@ Or step by step:
 curl -X POST http://localhost:4000/api/dev/setup-token \
   -H 'Content-Type: application/json' \
   -d '{"email": "oscar.lindqvist@atrium.local"}'
-# -> {"setup_url":"http://localhost:4000/api/dev/setup-password?token=...","expires_at":"..."}
+# -> {"setup_url":"http://localhost:3000/setup-password?token=...","expires_at":"..."}
 
-# 2. Redeem it with the new password (single use, 30-minute expiry)
+# 2. Open the setup_url in a browser: it shows the account and asks for
+#    a new password plus a confirmation. Redeem it there, or with curl
+#    (single use, 30-minute expiry):
 curl -X POST 'http://localhost:4000/api/dev/setup-password?token=<TOKEN>' \
   -H 'Content-Type: application/json' \
   -d '{"password": "your-password"}'

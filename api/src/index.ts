@@ -1,7 +1,7 @@
 import express from 'express';
 import cookieParser from 'cookie-parser';
 import cors from 'cors';
-import { issueSetupToken, login, logout, me, redeemSetupToken, requireSession, sessionSecret } from './auth';
+import { issueSetupToken, login, logout, me, redeemSetupToken, requireSession, sessionSecret, setupPasswordInfo } from './auth';
 import sessionRoutes from './routes/sessions';
 import roomRoutes from './routes/rooms';
 import peopleRoutes from './routes/people';
@@ -47,6 +47,7 @@ export function createApp(): express.Express {
   app.post('/api/logout', logout);
   app.get('/api/me', requireSession, me);
   app.post('/api/dev/setup-token', issueSetupToken);
+  app.get('/api/dev/setup-password', setupPasswordInfo);
   app.post('/api/dev/setup-password', redeemSetupToken);
 
   app.use('/api/sessions', sessionRoutes);
