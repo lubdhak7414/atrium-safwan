@@ -8,6 +8,7 @@
   ],
   "scripts": {
     "migrate": "node scripts/migrate.mjs",
+    "migrate:test": "node scripts/migrate.mjs --test",
     "dev": "concurrently \"npm run dev:api\" \"npm run dev:web\"",
     "dev:api": "npm --workspace api run dev",
     "dev:web": "npm --workspace web run dev",

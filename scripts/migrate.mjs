@@ -24,8 +24,11 @@ function loadEnv() {
 
 loadEnv();
 
-if (!process.env.DATABASE_URL) {
-  console.error('DATABASE_URL is not set in .env');
+const isTestMigration = process.argv.includes('--test');
+const databaseUrl = isTestMigration ? process.env.TEST_DATABASE_URL : process.env.DATABASE_URL;
+
+if (!databaseUrl) {
+  console.error(`${isTestMigration ? 'TEST_DATABASE_URL' : 'DATABASE_URL'} is not set in .env`);
   process.exit(1);
 }
 
@@ -37,12 +40,12 @@ if (files.length === 0) {
   process.exit(1);
 }
 
-const client = new pg.Client({ connectionString: process.env.DATABASE_URL });
+const client = new pg.Client({ connectionString: databaseUrl });
 
 try {
   await client.connect();
 } catch (err) {
-  console.error(`Could not connect using DATABASE_URL: ${err.message}`);
+  console.error(`Could not connect using ${isTestMigration ? 'TEST_DATABASE_URL' : 'DATABASE_URL'}: ${err.message}`);
   console.error('Is PostgreSQL running, and does the database exist? See INSTRUCTIONS.md.');
   process.exit(1);
 }
