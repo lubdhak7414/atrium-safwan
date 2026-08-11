@@ -8,6 +8,7 @@
   ],
   "scripts": {
     "migrate": "node scripts/migrate.mjs",
+    "dev": "concurrently \"npm run dev:api\" \"npm run dev:web\"",
     "dev:api": "npm --workspace api run dev",
     "dev:web": "npm --workspace web run dev",
     "build": "npm --workspace api run build && npm --workspace web run build",
@@ -17,10 +18,15 @@
     "pg": "^8.13.1"
   },
   "devDependencies": {
-    "typescript": "^5.7.2",
-    "@types/node": "^22.10.2"
+    "@types/node": "^22.10.2",
+    "concurrently": "^9.2.4",
+    "typescript": "^5.7.2"
   },
   "engines": {
     "node": ">=20"
+  },
+  "allowScripts": {
+    "esbuild@0.28.2": true,
+    "sharp@0.34.5": true
   }
 }

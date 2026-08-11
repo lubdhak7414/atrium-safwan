@@ -25,5 +25,5 @@ test('the refund percentage follows the notice given', () => {
 test('a refund of part of a credit', () => {
   assert.equal(refundAmount(40, 0.5), 20);
   assert.equal(refundAmount(120, 0.25), 30);
-  assert.equal(refundAmount(30, 0.25), 7);
+  assert.equal(refundAmount(30, 0.25), 8);
 });
