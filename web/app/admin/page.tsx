@@ -64,29 +64,10 @@ function AdminWorkspace() {
             <Link className="button-link" href="/create">CREATE SESSION</Link>
           </section>
           <PromotionManager />
-          <section className="data-panel action-panel" aria-labelledby="directory-title">
-            <div className="section-heading">
-              <div>
-                <h2 id="directory-title">PEOPLE DIRECTORY</h2>
-                <p className="muted">Every record in the centre, administrator view.</p>
-              </div>
-              <span className="mono">{people.length} PEOPLE</span>
-            </div>
-            <div className="table-scroll">
-              <table>
-                <thead><tr><th>ID</th><th>NAME</th><th>EMAIL</th><th>ROLE</th><th>CREDITS</th><th>ACTIVE</th></tr></thead>
-                <tbody>{people.map((person) => (
-                  <tr key={person.id}>
-                    <td className="mono">#{person.id}</td>
-                    <td>{person.full_name}</td>
-                    <td className="mono">{person.email}</td>
-                    <td className="mono">{person.kind.toUpperCase()}</td>
-                    <td className="mono">{person.credits ?? 0}</td>
-                    <td className="mono">{person.active === false ? 'NO' : 'YES'}</td>
-                  </tr>
-                ))}</tbody>
-              </table>
-            </div>
+          <section className="data-panel action-panel">
+            <h2>ACCOUNT MANAGEMENT</h2>
+            <p>Manage every record: deactivate accounts and send single-use password reset emails.</p>
+            <Link className="button-link" href="/admin/people">OPEN PEOPLE DIRECTORY</Link>
           </section>
         </>
       )}

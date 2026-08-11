@@ -6,7 +6,7 @@ import { useParams } from 'next/navigation';
 import { ApiError, fetchJson } from '../../../lib/api';
 import { formatCentreDate, formatCentreTime, nowInCentre, toApiIso } from '../../../lib/time';
 import { useCurrentUser } from '../../../components/CurrentUserProvider';
-import { AdminSessionActions, BookingActions, CoachSessionActions, CoachSessionDetail } from '../../../components/SessionActions';
+import { AdminSessionActions, AttendeesPanel, BookingActions, CoachSessionActions } from '../../../components/SessionActions';
 import type { Session } from '../../../lib/types';
 
 function normalize(raw: Record<string, unknown>): Session {
@@ -150,7 +150,7 @@ export default function SessionDetailPage() {
           )}
 
           {role !== 'participant' && session.visibility !== 'busy' && (
-            <CoachSessionDetail sessionId={sessionId} />
+            <AttendeesPanel sessionId={sessionId} refreshKey={version} />
           )}
         </>
       )}

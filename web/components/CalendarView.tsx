@@ -87,10 +87,12 @@ export function CalendarView({ role }: { role: Role }) {
 }
 
 function SessionTable({ title, sessions, allSessions = sessions, actionRole, onChanged, onOpen }: { title: string; sessions: Session[]; allSessions?: Session[]; actionRole?: 'participant' | 'coach'; onChanged?: () => void; onOpen?: (sessionId: number) => void }) {
+  const [openDetailId, setOpenDetailId] = useState<number | null>(null);
   return (
     <section className="data-panel">
       <h3>{title}</h3>
       {sessions.length === 0 ? <p className="muted">NONE RECORDED FOR THIS WEEK.</p> : (
+        <>
         <div className="table-scroll">
           <table>
             <thead><tr><th>SESSION</th><th>WHEN</th><th>ROOM</th><th>{actionRole === 'participant' ? 'FEE / PLACES' : 'STATUS'}</th>{actionRole && <th>ACTION</th>}</tr></thead>
@@ -101,11 +103,13 @@ function SessionTable({ title, sessions, allSessions = sessions, actionRole, onC
                 <td>{session.room_name}</td>
                 <td className="mono">{actionRole === 'participant' ? `${session.seat_fee_credits ?? 0} / ${session.places_remaining ?? 0}` : session.visibility === 'busy' ? 'OCCUPIED' : session.status.toUpperCase()}</td>
                 {actionRole === 'participant' && <td onClick={(event) => event.stopPropagation()}><BookingActions session={session} sessions={allSessions} onChanged={onChanged ?? (() => undefined)} /></td>}
-                {actionRole === 'coach' && <td onClick={(event) => event.stopPropagation()}><CoachSessionActions session={session} onChanged={onChanged ?? (() => undefined)} /><CoachSessionDetail sessionId={session.id} /></td>}
+                {actionRole === 'coach' && <td onClick={(event) => event.stopPropagation()}><CoachSessionActions session={session} onChanged={onChanged ?? (() => undefined)} /><button type="button" onClick={() => setOpenDetailId(openDetailId === session.id ? null : session.id)}>{openDetailId === session.id ? 'HIDE ATTENDEES' : 'ATTENDEES'}</button></td>}
               </tr>
             ))}</tbody>
           </table>
         </div>
+        {actionRole === 'coach' && openDetailId !== null && <CoachSessionDetail sessionId={openDetailId} open />}
+        </>
       )}
     </section>
   );

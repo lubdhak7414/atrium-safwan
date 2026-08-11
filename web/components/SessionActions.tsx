@@ -139,11 +139,74 @@ export function AdminSessionActions({ session, onChanged }: { session: Session; 
   );
 }
 
-export function CoachSessionDetail({ sessionId }: { sessionId: number }) {
-  const [open, setOpen] = useState(false);
+export function AttendeesPanel({ sessionId, refreshKey = 0 }: { sessionId: number; refreshKey?: number }) {
   const [detail, setDetail] = useState<{ attendees?: Array<{ id: number; full_name: string; status: string; check_in_count: number }> } | null>(null);
   const [error, setError] = useState('');
   const [actionId, setActionId] = useState<number | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    setError('');
+    setDetail(null);
+    fetchJson<{ attendees?: Array<{ id: number; full_name: string; status: string; check_in_count: number }> }>(`/api/sessions/${sessionId}`)
+      .then((rows) => {
+        if (!active) return;
+        setDetail(rows);
+      })
+      .catch((cause: Error) => {
+        if (!active) return;
+        setError(cause instanceof Error ? cause.message : 'Could not load attendees');
+      });
+    return () => { active = false; };
+  }, [refreshKey, sessionId]);
+
+  async function checkIn(enrolmentId: number) {
+    setActionId(enrolmentId);
+    setError('');
+    try {
+      await fetchJson(`/api/sessions/${sessionId}/check-ins`, { method: 'POST', body: JSON.stringify({ enrolment_id: enrolmentId }) });
+      const rows = await fetchJson<{ attendees?: Array<{ id: number; full_name: string; status: string; check_in_count: number }> }>(`/api/sessions/${sessionId}`);
+      setDetail(rows);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Could not check in attendee');
+    } finally {
+      setActionId(null);
+    }
+  }
+
+  return (
+    <section className="data-panel action-panel" aria-labelledby="attendees-title">
+      <p className="eyebrow">ATTENDANCE</p>
+      <h2 id="attendees-title">Attendees</h2>
+      {error && <p className="error-line" role="alert">{error}</p>}
+      {!detail && !error && <p className="state-line">LOADING ATTENDEES...</p>}
+      {detail && detail.attendees?.length === 0 && <p className="empty-line">NO ATTENDEES.</p>}
+      {detail && detail.attendees && detail.attendees.length > 0 && (
+        <div className="table-scroll">
+          <table>
+            <thead><tr><th>ATTENDEE</th><th>STATUS</th><th>CHECK-INS</th><th>ACTION</th></tr></thead>
+            <tbody>{detail.attendees.map((attendee) => (
+              <tr key={attendee.id}>
+                <td>{attendee.full_name}</td>
+                <td>{attendee.status}</td>
+                <td className="mono">{attendee.check_in_count}</td>
+                <td><button type="button" disabled={attendee.status !== 'active' || actionId === attendee.id} onClick={() => void checkIn(attendee.id)}>CHECK IN</button></td>
+              </tr>
+            ))}</tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  );
+}
+
+export function CoachSessionDetail({ sessionId, open: openProp }: { sessionId: number; open?: boolean }) {
+  const [openInternal, setOpenInternal] = useState(false);
+  const [detail, setDetail] = useState<{ attendees?: Array<{ id: number; full_name: string; status: string; check_in_count: number }> } | null>(null);
+  const [error, setError] = useState('');
+  const [actionId, setActionId] = useState<number | null>(null);
+  const open = openProp ?? openInternal;
+  const setOpen = openProp !== undefined ? () => undefined : setOpenInternal;
 
   async function load() {
     try {
@@ -168,7 +231,7 @@ export function CoachSessionDetail({ sessionId }: { sessionId: number }) {
 
   return (
     <section className="detail-toggle">
-      <button type="button" onClick={() => { setOpen((value) => !value); if (!open) void load(); }}>{open ? 'HIDE ATTENDEES' : 'ATTENDEES'}</button>
+      <button type="button" onClick={() => { setOpen(!open); if (!open) void load(); }}>{open ? 'HIDE ATTENDEES' : 'ATTENDEES'}</button>
       {open && <div className="detail-panel">{error && <p className="error-line">{error}</p>}{!detail && !error && <p className="state-line">LOADING ATTENDEES...</p>}{detail?.attendees?.length === 0 && <p className="empty-line">NO ATTENDEES.</p>}{detail?.attendees && detail.attendees.length > 0 && <div className="table-scroll"><table><thead><tr><th>ATTENDEE</th><th>STATUS</th><th>CHECK-INS</th><th>ACTION</th></tr></thead><tbody>{detail.attendees.map((attendee) => <tr key={attendee.id}><td>{attendee.full_name}</td><td>{attendee.status}</td><td className="mono">{attendee.check_in_count}</td><td><button type="button" disabled={attendee.status !== 'active' || actionId === attendee.id} onClick={() => void checkIn(attendee.id)}>CHECK IN</button></td></tr>)}</tbody></table></div>}</div>}
     </section>
   );

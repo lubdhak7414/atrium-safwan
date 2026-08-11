@@ -3,15 +3,27 @@
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { fetchJson, ApiError } from '../../lib/api';
+import { useCurrentUser } from '../../components/CurrentUserProvider';
 import type { Role } from '../../lib/types';
+
+function destinationFor(kind: Role): string {
+  return kind === 'participant' ? '/dashboard' : kind === 'coach' ? '/coach' : '/admin';
+}
 
 export default function Login() {
   const router = useRouter();
+  const { user, status: userStatus } = useCurrentUser();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const requestRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    if (userStatus === 'ready' && user) {
+      router.replace(destinationFor(user.kind));
+    }
+  }, [router, user, userStatus]);
 
   useEffect(() => () => requestRef.current?.abort(), []);
 
@@ -23,14 +35,13 @@ export default function Login() {
     const controller = new AbortController();
     requestRef.current = controller;
     try {
-      const user = await fetchJson<{ kind: Role }>('/api/login', {
+      const signedIn = await fetchJson<{ kind: Role }>('/api/login', {
         method: 'POST',
         signal: controller.signal,
         body: JSON.stringify({ email, password })
       });
-      const destination = user.kind === 'participant' ? '/dashboard' : user.kind === 'coach' ? '/coach' : '/admin';
       setLoading(false);
-      router.push(destination);
+      router.push(destinationFor(signedIn.kind));
     } catch (cause) {
       if (controller.signal.aborted) return;
       setError(cause instanceof ApiError ? cause.message : 'Could not sign in. Try again.');
@@ -38,6 +49,14 @@ export default function Login() {
     } finally {
       if (requestRef.current === controller) requestRef.current = null;
     }
+  }
+
+  if (userStatus === 'loading' || (userStatus === 'ready' && user)) {
+    return (
+      <main className="page-shell narrow-shell">
+        <p className="state-line">REDIRECTING TO YOUR DASHBOARD...</p>
+      </main>
+    );
   }
 
   return (
