@@ -1,6 +1,11 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import {
+  inCentreTimezone,
+  startOfCentreWeek,
+  toApiIso
+} from '../../../lib/time';
 
 type Room = { id: number; name: string; capacity: number };
 type Person = { id: number; full_name: string; email: string; kind: string };
@@ -18,7 +23,7 @@ type Session = {
   places_remaining: number;
 };
 
-const apiBaseUrl = process.env.API_BASE_URL || 'http://localhost:4000';
+const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:4000';
 
 const dayNames = [
   'Monday',
@@ -43,17 +48,8 @@ const sessionTypes = ['short', 'standard', 'intensive'];
 
 const hours = [7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20];
 
-const dayMilliseconds = 24 * 60 * 60 * 1000;
-
-function startOfWeek(date: Date) {
-  const start = new Date(date);
-  start.setHours(0, 0, 0, 0);
-  start.setDate(start.getDate() - ((start.getDay() + 6) % 7));
-  return start;
-}
-
 export default function AdminSessions() {
-  const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date()));
+  const [weekStart, setWeekStart] = useState(() => startOfCentreWeek());
   const [sessions, setSessions] = useState<Session[]>([]);
   const [rooms, setRooms] = useState<Room[]>([]);
   const [people, setPeople] = useState<Person[]>([]);
@@ -67,14 +63,14 @@ export default function AdminSessions() {
   const [coachId, setCoachId] = useState('');
 
   const days = [0, 1, 2, 3, 4, 5, 6].map(
-    (offset) => new Date(weekStart.getTime() + offset * dayMilliseconds)
+    (offset) => weekStart.plus({ days: offset })
   );
 
   function loadSessions() {
-    const to = new Date(weekStart.getTime() + 7 * dayMilliseconds);
+    const to = weekStart.plus({ weeks: 1 });
 
     fetch(
-      `${apiBaseUrl}/api/sessions?from=${weekStart.toISOString()}&to=${to.toISOString()}`,
+      `${apiBaseUrl}/api/sessions?from=${toApiIso(weekStart)}&to=${toApiIso(to)}`,
       { credentials: 'include' }
     )
       .then((res) => res.json())
@@ -95,15 +91,10 @@ export default function AdminSessions() {
       .then(setPeople);
   }, []);
 
-  function sessionsFor(day: Date, hour: number) {
+  function sessionsFor(day: (typeof days)[number], hour: number) {
     return sessions.filter((session) => {
-      const starts = new Date(session.starts_at);
-      return (
-        starts.getFullYear() === day.getFullYear() &&
-        starts.getMonth() === day.getMonth() &&
-        starts.getDate() === day.getDate() &&
-        starts.getHours() === hour
-      );
+      const starts = inCentreTimezone(session.starts_at);
+      return starts.hasSame(day, 'day') && starts.hour === hour;
     });
   }
 
@@ -133,10 +124,10 @@ export default function AdminSessions() {
       <h1>Session calendar</h1>
 
       <p>
-        <button onClick={() => setWeekStart(new Date(weekStart.getTime() - 7 * dayMilliseconds))}>
+        <button onClick={() => setWeekStart(weekStart.minus({ weeks: 1 }))}>
           Previous week
         </button>{' '}
-        <button onClick={() => setWeekStart(new Date(weekStart.getTime() + 7 * dayMilliseconds))}>
+        <button onClick={() => setWeekStart(weekStart.plus({ weeks: 1 }))}>
           Next week
         </button>
       </p>
@@ -147,7 +138,7 @@ export default function AdminSessions() {
             <th className="hour"></th>
             {days.map((day, index) => (
               <th key={index}>
-                {dayNames[index]} {day.getDate()}/{day.getMonth() + 1}
+                {dayNames[index]} {day.day}/{day.month}
               </th>
             ))}
           </tr>

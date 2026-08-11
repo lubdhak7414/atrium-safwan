@@ -1,19 +1,13 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { startOfCentreWeek, toApiIso } from '../../lib/time';
 
 type Room = { id: number; name: string; capacity: number };
 type Person = { id: number; full_name: string; email: string; kind: string };
 type Session = { id: number; starts_at: string; ends_at: string };
 
-const apiBaseUrl = process.env.API_BASE_URL || 'http://localhost:4000';
-
-function startOfWeek(date: Date) {
-  const start = new Date(date);
-  start.setHours(0, 0, 0, 0);
-  start.setDate(start.getDate() - ((start.getDay() + 6) % 7));
-  return start;
-}
+const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:4000';
 
 export default function AdminDashboard() {
   const [rooms, setRooms] = useState<Room[]>([]);
@@ -21,8 +15,8 @@ export default function AdminDashboard() {
   const [sessions, setSessions] = useState<Session[]>([]);
 
   useEffect(() => {
-    const from = startOfWeek(new Date());
-    const to = new Date(from.getTime() + 7 * 24 * 60 * 60 * 1000);
+    const from = startOfCentreWeek();
+    const to = from.plus({ weeks: 1 });
 
     fetch(`${apiBaseUrl}/api/rooms`, { credentials: 'include' })
       .then((res) => res.json())
@@ -33,7 +27,7 @@ export default function AdminDashboard() {
       .then(setPeople);
 
     fetch(
-      `${apiBaseUrl}/api/sessions?from=${from.toISOString()}&to=${to.toISOString()}`,
+      `${apiBaseUrl}/api/sessions?from=${toApiIso(from)}&to=${toApiIso(to)}`,
       { credentials: 'include' }
     )
       .then((res) => res.json())

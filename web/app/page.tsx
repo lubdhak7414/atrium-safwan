@@ -1,3 +1,10 @@
+import {
+  formatCentreDate,
+  formatCentreTime,
+  nowInCentre,
+  toApiIso
+} from '../lib/time';
+
 export const dynamic = 'force-dynamic';
 
 type Session = {
@@ -14,14 +21,14 @@ type Session = {
   places_remaining: number;
 };
 
-const apiBaseUrl = process.env.API_BASE_URL || 'http://localhost:4000';
+const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || process.env.API_BASE_URL || 'http://localhost:4000';
 
 export default async function PublicSessions() {
-  const from = new Date();
-  const to = new Date(from.getTime() + 14 * 24 * 60 * 60 * 1000);
+  const from = nowInCentre();
+  const to = from.plus({ days: 14 });
 
   const res = await fetch(
-    `${apiBaseUrl}/api/sessions?from=${from.toISOString()}&to=${to.toISOString()}`,
+    `${apiBaseUrl}/api/sessions?from=${toApiIso(from)}&to=${toApiIso(to)}`,
     { cache: 'no-store' }
   );
   const sessions: Session[] = await res.json();
@@ -43,17 +50,11 @@ export default async function PublicSessions() {
           {sessions.map((session) => (
             <tr key={session.id}>
               <td>{session.discipline}</td>
-              <td>{new Date(session.starts_at).toLocaleDateString()}</td>
+              <td>{formatCentreDate(session.starts_at)}</td>
               <td>
-                {new Date(session.starts_at).toLocaleTimeString([], {
-                  hour: '2-digit',
-                  minute: '2-digit'
-                })}
+                {formatCentreTime(session.starts_at)}
                 {' – '}
-                {new Date(session.ends_at).toLocaleTimeString([], {
-                  hour: '2-digit',
-                  minute: '2-digit'
-                })}
+                {formatCentreTime(session.ends_at)}
               </td>
               <td>{session.room_name}</td>
               <td>{session.places_remaining}</td>
