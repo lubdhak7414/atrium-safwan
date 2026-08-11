@@ -24,6 +24,7 @@ export function RoleNav() {
         {user && <Link className={pathname === '/admin' || pathname === '/coach' || pathname === '/dashboard' ? 'nav-active' : ''} href={user.kind === 'admin' ? '/admin' : user.kind === 'coach' ? '/coach' : '/dashboard'}>Dashboard</Link>}
         <Link className={pathname === '/catalogue' ? 'nav-active' : ''} href="/catalogue">Catalogue</Link>
         <Link className={pathname === '/policies' ? 'nav-active' : ''} href="/policies">Policies</Link>
+        <Link className={pathname === '/assistant' ? 'nav-active' : ''} href="/assistant">Assistant</Link>
         {status === 'loading' && !user && <span className="nav-loading" aria-live="polite">CHECKING...</span>}
         {status === 'error' && !user && <span className="nav-loading">UNAVAILABLE</span>}
         {status === 'ready' && !user && <Link href="/login">Log in</Link>}

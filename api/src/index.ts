@@ -6,6 +6,7 @@ import sessionRoutes from './routes/sessions';
 import roomRoutes from './routes/rooms';
 import peopleRoutes from './routes/people';
 import enrolmentRoutes from './routes/enrolments';
+import assistantRoutes from './routes/assistant';
 import http from 'node:http';
 import { pool } from './db';
 import { OutboxDispatcher } from './outbox';
@@ -54,6 +55,7 @@ export function createApp(): express.Express {
   app.use('/api/rooms', roomRoutes);
   app.use('/api/people', peopleRoutes);
   app.use('/api/enrolments', enrolmentRoutes);
+  app.use('/api/assistant', assistantRoutes);
 
   return app;
 }

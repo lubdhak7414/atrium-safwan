@@ -27,11 +27,11 @@ export default async function HomePage() {
       <div className="home-top-grid">
         <section className="hero-panel hero-panel-no-preview">
           <div className="hero-copy">
-           <p className="eyebrow">ATRIUM COACHING CENTRE</p>
-           <h1>Book coaching that fits your week.<br />Plan with confidence.</h1>
-           <p>Compare upcoming sessions by time, room, price, and places remaining before you book. Coaches reserve rooms to teach; participants reserve places to learn.</p>
-           <p>Open Monday to Saturday, 07:00–21:00 centre time.</p>
-           <div className="hero-actions"><Link className="button-link" href="/catalogue">Browse sessions</Link><Link className="button-link secondary-button" href="/policies">See pricing &amp; policies</Link></div>
+            <p className="eyebrow">ATRIUM COACHING CENTRE</p>
+            <h1>Book coaching that fits your week.<br />Plan with confidence.</h1>
+            <p>Compare upcoming sessions by time, room, price, and places remaining before you book. Coaches reserve rooms to teach; participants reserve places to learn.</p>
+            <p>Open Monday to Saturday, 07:00–21:00 centre time.</p>
+            <div className="hero-actions"><Link className="button-link" href="/catalogue">Browse sessions</Link><Link className="button-link secondary-button" href="/policies">See pricing &amp; policies</Link><Link className="button-link secondary-button" href="/assistant">Ask Atrium</Link></div>
           </div>
         </section>
         <AccountOverview />
