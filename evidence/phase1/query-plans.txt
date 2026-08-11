@@ -1,0 +1,111 @@
+Phase 1.4 EXPLAIN (ANALYZE, BUFFERS) evidence
+
+The same query shapes and literal values were run before and after 003_schema_hardening.sql.
+
+=== upcoming: before 003 ===
+Sort  (cost=29.18..29.42 rows=96 width=55) (actual time=0.120..0.124 rows=93.00 loops=1)
+  Sort Key: starts_at
+  Sort Method: quicksort  Memory: 31kB
+  Buffers: shared hit=15
+  ->  Seq Scan on session  (cost=0.00..26.02 rows=96 width=55) (actual time=0.007..0.083 rows=93.00 loops=1)
+        Filter: ((starts_at >= '2026-09-01 00:00:00+00'::timestamp with time zone) AND (starts_at < '2026-10-01 00:00:00+00'::timestamp with time zone) AND (status <> 'cancelled'::text))
+        Rows Removed by Filter: 708
+        Buffers: shared hit=12
+  Planning Time: 0.264 ms
+  Execution Time: 0.155 ms
+
+=== upcoming: after 003 ===
+Sort  (cost=26.21..26.45 rows=96 width=55) (actual time=0.132..0.138 rows=93.00 loops=1)
+  Sort Key: starts_at
+  Sort Method: quicksort  Memory: 31kB
+  Buffers: shared hit=15 read=2
+  ->  Bitmap Heap Scan on session  (cost=5.30..23.05 rows=96 width=55) (actual time=0.039..0.083 rows=93.00 loops=1)
+        Recheck Cond: ((starts_at >= '2026-09-01 00:00:00+00'::timestamp with time zone) AND (starts_at < '2026-10-01 00:00:00+00'::timestamp with time zone))
+        Filter: (status <> 'cancelled'::text)
+        Rows Removed by Filter: 7
+        Heap Blocks: exact=12
+        Buffers: shared hit=12 read=2
+        ->  Bitmap Index Scan on session_starts_at_idx  (cost=0.00..5.28 rows=100 width=0) (actual time=0.029..0.029 rows=100.00 loops=1)
+              Index Cond: ((starts_at >= '2026-09-01 00:00:00+00'::timestamp with time zone) AND (starts_at < '2026-10-01 00:00:00+00'::timestamp with time zone))
+              Index Searches: 1
+              Buffers: shared read=2
+  Planning Time: 0.626 ms
+  Execution Time: 0.194 ms
+
+=== room_overlap: before 003 ===
+Seq Scan on session  (cost=0.00..28.02 rows=1 width=4) (actual time=0.064..0.083 rows=1.00 loops=1)
+  Filter: ((status <> 'cancelled'::text) AND (room_id = 5) AND (tstzrange(starts_at, ends_at, '[)'::text) && '["2026-09-15 12:15:00+00","2026-09-15 13:15:00+00")'::tstzrange))
+  Rows Removed by Filter: 800
+  Buffers: shared hit=12
+  Planning Time: 0.045 ms
+  Execution Time: 0.088 ms
+
+=== room_overlap: after 003 ===
+Index Scan using session_room_time_exclusion on session  (cost=0.14..8.16 rows=1 width=4) (actual time=0.386..0.387 rows=1.00 loops=1)
+  Index Cond: ((room_id = 5) AND (tstzrange(starts_at, ends_at, '[)'::text) && '["2026-09-15 12:15:00+00","2026-09-15 13:15:00+00")'::tstzrange))
+  Index Searches: 1
+  Buffers: shared hit=48
+  Planning Time: 0.072 ms
+  Execution Time: 0.392 ms
+
+=== active_capacity: before 003 ===
+Aggregate  (cost=71.50..71.51 rows=1 width=8) (actual time=0.166..0.166 rows=1.00 loops=1)
+  Buffers: shared hit=26
+  ->  Seq Scan on enrolment  (cost=0.00..71.48 rows=9 width=0) (actual time=0.013..0.164 rows=8.00 loops=1)
+        Filter: ((session_id = 83) AND (status = 'active'::text))
+        Rows Removed by Filter: 3024
+        Buffers: shared hit=26
+  Planning Time: 0.060 ms
+  Execution Time: 0.177 ms
+
+=== active_capacity: after 003 ===
+Aggregate  (cost=24.51..24.52 rows=1 width=8) (actual time=0.036..0.036 rows=1.00 loops=1)
+  Buffers: shared hit=8 read=2
+  ->  Bitmap Heap Scan on enrolment  (cost=4.35..24.48 rows=9 width=0) (actual time=0.020..0.033 rows=8.00 loops=1)
+        Recheck Cond: ((session_id = 83) AND (status = 'active'::text))
+        Heap Blocks: exact=8
+        Buffers: shared hit=8 read=2
+        ->  Bitmap Index Scan on enrolment_active_person_session_unique  (cost=0.00..4.35 rows=9 width=0) (actual time=0.015..0.015 rows=8.00 loops=1)
+              Index Cond: (session_id = 83)
+              Index Searches: 1
+              Buffers: shared read=2
+  Planning Time: 0.159 ms
+  Execution Time: 0.047 ms
+
+=== own_bookings: before 003 ===
+Seq Scan on enrolment  (cost=0.00..63.90 rows=127 width=31) (actual time=0.009..0.144 rows=127.00 loops=1)
+  Filter: (person_id = 2)
+  Rows Removed by Filter: 2905
+  Buffers: shared hit=26
+  Planning Time: 0.031 ms
+  Execution Time: 0.152 ms
+
+=== own_bookings: after 003 ===
+Bitmap Heap Scan on enrolment  (cost=5.26..38.85 rows=127 width=31) (actual time=0.026..0.069 rows=127.00 loops=1)
+  Recheck Cond: (person_id = 2)
+  Heap Blocks: exact=30
+  Buffers: shared hit=30 read=2
+  ->  Bitmap Index Scan on enrolment_person_id_idx  (cost=0.00..5.23 rows=127 width=0) (actual time=0.018..0.018 rows=127.00 loops=1)
+        Index Cond: (person_id = 2)
+        Index Searches: 1
+        Buffers: shared read=2
+  Planning Time: 0.049 ms
+  Execution Time: 0.079 ms
+
+=== email_lookup: before 003 ===
+Seq Scan on person  (cost=0.00..2.50 rows=1 width=53) (actual time=0.007..0.008 rows=1.00 loops=1)
+  Filter: (email = 'sofia.marino@atrium.local'::text)
+  Rows Removed by Filter: 39
+  Buffers: shared hit=2
+  Planning Time: 0.061 ms
+  Execution Time: 0.012 ms
+
+=== email_lookup: after 003 ===
+Seq Scan on person  (cost=0.00..1.50 rows=1 width=53) (actual time=0.015..0.016 rows=1.00 loops=1)
+  Filter: (email = 'sofia.marino@atrium.local'::text)
+  Rows Removed by Filter: 39
+  Buffers: shared hit=1
+  Planning Time: 0.100 ms
+  Execution Time: 0.021 ms
+
+The email lookup remains a sequential scan because the seed table has only 40 rows; the unique email constraint still supplies the required lookup index for production-sized data and enforces uniqueness.

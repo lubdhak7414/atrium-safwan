@@ -47,19 +47,63 @@ try {
   process.exit(1);
 }
 
+const migrationLock = 'atrium:migrations';
+await client.query(
+  'select pg_advisory_lock(hashtextextended($1, 0))',
+  [migrationLock],
+);
+
+await client.query(`
+  create table if not exists schema_migrations (
+    filename   text primary key,
+    applied_at timestamptz not null default now()
+  )
+`);
+
+let applied = 0;
+let skipped = 0;
+
 for (const file of files) {
-  process.stdout.write(`applying ${file} ... `);
-  const sql = readFileSync(join(dir, file), 'utf8');
+  await client.query('begin');
   try {
+    const tracked = await client.query(
+      'select 1 from schema_migrations where filename = $1',
+      [file],
+    );
+
+    if (tracked.rowCount > 0) {
+      await client.query('commit');
+      skipped += 1;
+      console.log(`skipping ${file} (already applied)`);
+      continue;
+    }
+
+    process.stdout.write(`applying ${file} ... `);
+    const sql = readFileSync(join(dir, file), 'utf8');
     await client.query(sql);
+    await client.query(
+      'insert into schema_migrations (filename) values ($1)',
+      [file],
+    );
+    await client.query('commit');
+    applied += 1;
     console.log('ok');
   } catch (err) {
     console.log('failed');
     console.error(`\n${file}: ${err.message}`);
+    await client.query('rollback').catch(() => {});
+    await client.query(
+      'select pg_advisory_unlock(hashtextextended($1, 0))',
+      [migrationLock],
+    ).catch(() => {});
     await client.end();
     process.exit(1);
   }
 }
 
+await client.query(
+  'select pg_advisory_unlock(hashtextextended($1, 0))',
+  [migrationLock],
+);
 await client.end();
-console.log(`\n${files.length} migration(s) applied.`);
+console.log(`\n${applied} migration(s) applied, ${skipped} already applied.`);
