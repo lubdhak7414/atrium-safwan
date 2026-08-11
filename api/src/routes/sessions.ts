@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { requireRole, requireSession, optionalSession } from '../auth';
 import { parseRequest } from '../validation';
+import { query } from '../db';
 import { getSessionForCaller, listSessionsForCaller } from '../permissions';
 import {
   cancelSession,
@@ -21,7 +22,13 @@ const localTimeSchema = z.string().regex(/^\d{2}:\d{2}$/);
 
 const sessionListQuerySchema = z.object({
   from: z.string().datetime({ offset: true }).optional(),
-  to: z.string().datetime({ offset: true }).optional()
+  to: z.string().datetime({ offset: true }).optional(),
+  promoted: z.enum(['true', 'false']).transform((value) => value === 'true').optional(),
+  catalogue: z.enum(['true', 'false']).transform((value) => value === 'true').optional()
+}).strict();
+
+const promotionSchema = z.object({
+  promoted: z.boolean()
 }).strict();
 
 const createSessionSchema = z.object({
@@ -51,6 +58,14 @@ const reassignSchema = z.object({
 
 const emptyBodySchema = z.object({}).strict().optional();
 
+async function queryPromotion(sessionId: number, promoted: boolean): Promise<Record<string, unknown> | null> {
+  const rows = await query<{ id: number; is_promoted: boolean }>(
+    'update session set is_promoted = $1 where id = $2 returning id, is_promoted',
+    [promoted, sessionId]
+  );
+  return rows[0] ?? null;
+}
+
 function sendError(res: any, error: unknown, fallback: string): void {
   const mapped = responseError(error);
   if (mapped) {
@@ -77,11 +92,30 @@ router.get('/', optionalSession, async (req, res) => {
     const feed = await listSessionsForCaller(
       res.locals.person,
       input.from ?? new Date().toISOString(),
-      input.to
+      input.to,
+      input.promoted,
+      input.catalogue
     );
     res.json(feed);
   } catch (error) {
     sendError(res, error, 'could not load the calendar');
+  }
+});
+
+router.post('/:id/promotion', requireSession, requireRole('admin'), async (req, res) => {
+  const id = parseId(req.params.id, res);
+  if (id === null) return;
+  const body = parseRequest(promotionSchema, req.body, res);
+  if (!body) return;
+  try {
+    const updated = await queryPromotion(id, body.promoted);
+    if (!updated) {
+      res.status(404).json({ error: 'no such session' });
+      return;
+    }
+    res.json(updated);
+  } catch (error) {
+    sendError(res, error, 'could not update the promotion');
   }
 });
 

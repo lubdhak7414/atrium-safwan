@@ -25,6 +25,7 @@ type SessionFeedRow = {
   room_name: string;
   room_capacity: number;
   coach_name: string;
+  is_promoted: boolean;
   enrolled_count: number;
   own_enrolment_id: number | null;
   own_enrolment_status: string | null;
@@ -45,7 +46,8 @@ function publicSession(row: SessionFeedRow): Record<string, unknown> {
     room_fee_credits: row.room_fee_credits,
     seat_fee_credits: row.seat_fee_credits,
     enrolled_count: row.enrolled_count,
-    places_remaining: row.room_capacity - row.enrolled_count
+    places_remaining: row.room_capacity - row.enrolled_count,
+    is_promoted: row.is_promoted
   };
 }
 
@@ -65,7 +67,9 @@ function busySession(row: SessionFeedRow): Record<string, unknown> {
 export async function listSessionsForCaller(
   caller: Caller | undefined,
   from: string,
-  to: string | undefined
+  to: string | undefined,
+  promoted: boolean | undefined,
+  catalogue = false
 ): Promise<Record<string, unknown>[]> {
   const params: unknown[] = [from];
   let range = 's.starts_at >= $1';
@@ -73,12 +77,16 @@ export async function listSessionsForCaller(
     params.push(to);
     range += ` and s.starts_at < $${params.length}`;
   }
+  if (promoted !== undefined) {
+    params.push(promoted);
+    range += ` and s.is_promoted = $${params.length}`;
+  }
 
-  if (caller?.kind === 'participant') {
+  if (caller?.kind === 'participant' || caller?.kind === 'coach') {
     params.push(caller.id);
   }
 
-  const ownEnrolmentJoin = caller?.kind === 'participant'
+  const ownEnrolmentJoin = caller?.kind === 'participant' || caller?.kind === 'coach'
     ? `left join enrolment own_e on own_e.session_id = s.id and own_e.person_id = $${params.length} and own_e.status = 'active'`
     : 'left join enrolment own_e on false';
 
@@ -87,6 +95,7 @@ export async function listSessionsForCaller(
             s.starts_at, s.ends_at, s.room_fee_credits, s.seat_fee_credits,
             r.name as room_name, r.capacity as room_capacity,
             coach.full_name as coach_name,
+            s.is_promoted,
             count(active_e.id) filter (where active_e.person_id <> s.coach_id)::int as enrolled_count,
             own_e.id as own_enrolment_id, own_e.status as own_enrolment_status,
             own_e.credits_charged as own_credits_charged
@@ -103,9 +112,9 @@ export async function listSessionsForCaller(
   );
 
   return rows.map((row) => {
-    if (!caller || caller.kind === 'participant') {
+    if (!caller || caller.kind === 'participant' || catalogue) {
       const result = publicSession(row);
-      if (caller?.kind === 'participant') {
+      if (caller?.kind === 'participant' || caller?.kind === 'coach') {
         result.my_enrolment = row.own_enrolment_id
           ? {
               id: row.own_enrolment_id,
