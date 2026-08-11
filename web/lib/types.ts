@@ -24,6 +24,7 @@ export type Session = {
   enrolled_count?: number;
   places_remaining?: number;
   visibility?: 'busy';
+  is_own_session?: boolean;
   coach_id?: number;
   coach_name?: string;
   is_promoted?: boolean;
@@ -35,4 +36,4 @@ export type Session = {
 };
 
 export type Room = { id: number; name: string; capacity: number };
-export type Person = { id: number; full_name: string; email: string; kind: Role; credits?: number };
+export type Person = { id: number; full_name: string; email: string; kind: Role; credits?: number; active?: boolean };
