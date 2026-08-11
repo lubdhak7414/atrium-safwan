@@ -135,6 +135,10 @@ describe('booking engine integration', () => {
       "select count(*)::text as count from email_outbox where event_type = 'participant.booking.created'",
     );
     assert.equal(Number(createdEvents[0].count), 3);
+    const createdRecipients = await query<{ recipient: string }>(
+      "select recipient from email_outbox where event_type = 'participant.booking.created' order by recipient",
+    );
+    assert.deepEqual(createdRecipients.map((row) => row.recipient), [data.coach.email, data.coach.email, data.otherCoach.email].sort());
 
     const overlap = await request(`/api/sessions/${data.overlapId}/enrol`, post(), firstCookie);
     assert.equal(overlap.status, 409);
@@ -151,6 +155,13 @@ describe('booking engine integration', () => {
       "select count(*)::text as count from email_outbox where event_type = 'participant.booking.cancelled'",
     );
     assert.equal(Number(cancelledEvents[0].count), 1);
+    const cancelledEvent = await query<{ event_key: string; recipient: string }>(
+      "select event_key, recipient from email_outbox where event_type = 'participant.booking.cancelled'",
+    );
+    assert.deepEqual(cancelledEvent, [{
+      event_key: `booking-change:${firstEnrolment.id}:1`,
+      recipient: data.coach.email
+    }]);
     const remaining = await query<{ status: string }>(
       'select status from enrolment where session_id = $1 order by person_id',
       [data.sourceId]
@@ -199,6 +210,11 @@ describe('booking engine integration', () => {
     assert.equal(intensiveSession.status, 201);
     const intensiveRow = await intensiveSession.json();
     assert.equal(new Date(intensiveRow.ends_at).getTime() - new Date(intensiveRow.starts_at).getTime(), 210 * 60 * 1000);
+    const roomBookedEvents = await query<{ event_key: string; recipient: string }>(
+      "select event_key, recipient from email_outbox where event_type = 'room.booked_by_coach' order by event_key",
+    );
+    assert.equal(roomBookedEvents.length, 3);
+    assert.ok(roomBookedEvents.every((row) => row.recipient === data.admin.email));
 
     const intensiveBooking = await request(`/api/sessions/${data.intensiveId}/enrol`, post(), firstCookie);
     assert.equal(intensiveBooking.status, 201);
@@ -270,6 +286,13 @@ describe('booking engine integration', () => {
       "select count(*)::text as count from email_outbox where event_type = 'participant.booking.changed'",
     );
     assert.equal(Number(changedEvents[0].count), 2);
+    const changedKeys = await query<{ event_key: string; recipient: string }>(
+      "select event_key, recipient from email_outbox where event_type = 'participant.booking.changed' order by recipient",
+    );
+    assert.deepEqual(changedKeys.sort((left, right) => left.recipient.localeCompare(right.recipient)), [
+      { event_key: `booking-change:${old.id}:1`, recipient: data.coach.email },
+      { event_key: `booking-change:${old.id}:1`, recipient: data.otherCoach.email }
+    ].sort((left, right) => left.recipient.localeCompare(right.recipient)));
     const rows = await query<{ session_id: number; status: string; credits_charged: number; credits_refunded: number }>(
       'select session_id, status, credits_charged, credits_refunded from enrolment where person_id = $1 order by id',
       [data.first.id]
@@ -302,8 +325,10 @@ describe('booking engine integration', () => {
     const secondCookie = await login(data.second);
     const coachCookie = await login(data.coach);
     const otherCoachCookie = await login(data.otherCoach);
+    const attendeeCookie = await login(data.replacementCoach);
     await request(`/api/sessions/${data.sourceId}/enrol`, post(), firstCookie);
     await request(`/api/sessions/${data.sourceId}/enrol`, post(), secondCookie);
+    await request(`/api/sessions/${data.sourceId}/enrol`, post(), attendeeCookie);
 
     const crossCancel = await request(`/api/sessions/${data.sourceId}/cancel`, post(), otherCoachCookie);
     assert.equal(crossCancel.status, 403);
@@ -335,19 +360,38 @@ describe('booking engine integration', () => {
     const session = await query<{ room_id: number; starts_at: Date }>('select room_id, starts_at from session where id = $1', [data.sourceId]);
     assert.equal(session[0].room_id, data.destinationRoomId);
     const enrolments = await query<{ status: string }>('select status from enrolment where session_id = $1', [data.sourceId]);
-    assert.deepEqual(enrolments.map((row) => row.status), ['active', 'active']);
+    assert.deepEqual(enrolments.map((row) => row.status), ['active', 'active', 'active']);
+    const sessionChanges = await query<{ event_key: string; recipient: string }>(
+      "select event_key, recipient from email_outbox where event_type = 'coach.attendee.session_changed'",
+    );
+    assert.deepEqual(sessionChanges, [{
+      event_key: `session-change:${data.sourceId}:1:coach.attendee.session_changed`,
+      recipient: data.replacementCoach.email
+    }]);
   });
 
   test('cancelling a session releases its room for a later booking', async () => {
     const data = await fixture();
     const coachCookie = await login(data.coach);
     const adminCookie = await login(data.admin);
+    const firstCookie = await login(data.first);
+    const attendeeCookie = await login(data.replacementCoach);
+    assert.equal((await request(`/api/sessions/${data.sourceId}/enrol`, post(), firstCookie)).status, 201);
+    assert.equal((await request(`/api/sessions/${data.sourceId}/enrol`, post(), attendeeCookie)).status, 201);
     const cancelled = await request(`/api/sessions/${data.sourceId}/cancel`, post(), coachCookie);
     assert.equal(cancelled.status, 200);
     const sessionCancellationEvents = await query<{ count: string }>(
       "select count(*)::text as count from email_outbox where event_type = 'session.cancelled'",
     );
-    assert.equal(Number(sessionCancellationEvents[0].count), 1);
+    assert.equal(Number(sessionCancellationEvents[0].count), 3);
+    const sessionCancellationRecipients = await query<{ recipient: string }>(
+      "select recipient from email_outbox where event_type = 'session.cancelled' order by recipient",
+    );
+    assert.deepEqual(sessionCancellationRecipients.map((row) => row.recipient), [
+      data.admin.email,
+      data.first.email,
+      data.replacementCoach.email
+    ].sort());
     const roomCancellationEvents = await query<{ count: string }>(
       "select count(*)::text as count from email_outbox where event_type = 'room.cancelled_by_coach'",
     );
@@ -424,6 +468,13 @@ describe('booking engine integration', () => {
       [data.coach.id, 4040],
       [data.replacementCoach.id, 3960]
     ]);
+    const reassignedEvents = await query<{ event_key: string; recipient: string }>(
+      "select event_key, recipient from email_outbox where event_type = 'coach.reassigned'",
+    );
+    assert.deepEqual(reassignedEvents, [{
+      event_key: `session-change:${data.sourceId}:1:coach.reassigned`,
+      recipient: data.coach.email
+    }]);
   });
 
   test('completion and check-in enforce actor and timing rules', async () => {
@@ -479,5 +530,28 @@ describe('booking engine integration', () => {
     );
     const afterEnd = await request(`/api/sessions/${data.destinationId}/check-ins`, post({ enrolment_id: ended[0].id }), otherCoachCookie);
     assert.equal(afterEnd.status, 409);
+  });
+
+  test('an administrator cancellation notifies only via session.cancelled, never room.cancelled_by_coach', async () => {
+    const data = await fixture();
+    const adminCookie = await login(data.admin);
+    const firstCookie = await login(data.first);
+    assert.equal((await request(`/api/sessions/${data.sourceId}/enrol`, post(), firstCookie)).status, 201);
+
+    const cancelled = await request(`/api/sessions/${data.sourceId}/cancel`, post(), adminCookie);
+    assert.equal(cancelled.status, 200);
+
+    const sessionCancelled = await query<{ event_key: string; recipient: string }>(
+      "select event_key, recipient from email_outbox where event_type = 'session.cancelled' order by recipient",
+    );
+    assert.deepEqual(sessionCancelled, [
+      { event_key: `session-change:${data.sourceId}:1:session.cancelled`, recipient: data.admin.email },
+      { event_key: `session-change:${data.sourceId}:1:session.cancelled`, recipient: data.first.email }
+    ].sort((left, right) => left.recipient.localeCompare(right.recipient)));
+
+    const roomCancelled = await query<{ count: string }>(
+      "select count(*)::text as count from email_outbox where event_type = 'room.cancelled_by_coach'",
+    );
+    assert.equal(Number(roomCancelled[0].count), 0);
   });
 });

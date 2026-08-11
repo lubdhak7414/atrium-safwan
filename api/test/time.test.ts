@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseLocalSessionWindow } from '../src/time';
+import { addLocalDays, localDayWindow, parseLocalSessionWindow } from '../src/time';
 
 test('local session input resolves in the centre timezone', () => {
   const result = parseLocalSessionWindow({
@@ -68,4 +68,14 @@ test('the 48-hour boundary is inclusive at exactly 48 hours', () => {
 
   assert.equal(typeof exact, 'object');
   assert.equal(typeof late, 'string');
+});
+
+test('local calendar arithmetic preserves DST day lengths', () => {
+  const autumn = localDayWindow('2026-11-01');
+  const spring = localDayWindow('2026-03-08');
+
+  assert.equal(autumn.hours, 25);
+  assert.equal(spring.hours, 23);
+  assert.equal(addLocalDays('2026-10-31', 1), '2026-11-01');
+  assert.equal(addLocalDays('2026-03-08', 1), '2026-03-09');
 });
