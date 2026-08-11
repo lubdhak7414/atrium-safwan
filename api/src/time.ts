@@ -2,6 +2,51 @@ import { DateTime } from 'luxon';
 
 export const CENTRE_TIMEZONE = process.env.CENTRE_TIMEZONE || 'America/New_York';
 
+export type LocalDayWindow = {
+  localDate: string;
+  from: string;
+  to: string;
+  hours: number;
+};
+
+function centreDateTime(value: Date | string): DateTime {
+  const dateTime = value instanceof Date
+    ? DateTime.fromJSDate(value, { zone: CENTRE_TIMEZONE })
+    : DateTime.fromISO(value, { zone: CENTRE_TIMEZONE });
+  if (!dateTime.isValid) throw new Error(`invalid centre-local date: ${value}`);
+  return dateTime;
+}
+
+export function localDateForInstant(value: Date = new Date()): string {
+  return centreDateTime(value).toISODate()!;
+}
+
+export function addLocalDays(localDate: string, days: number): string {
+  const value = DateTime.fromISO(localDate, { zone: CENTRE_TIMEZONE }).startOf('day');
+  if (!value.isValid || value.toISODate() !== localDate) throw new Error(`invalid local date: ${localDate}`);
+  return value.plus({ days }).toISODate()!;
+}
+
+export function localDayWindow(localDate: string): LocalDayWindow {
+  const start = DateTime.fromISO(localDate, { zone: CENTRE_TIMEZONE }).startOf('day');
+  if (!start.isValid || start.toISODate() !== localDate) throw new Error(`invalid local date: ${localDate}`);
+  const end = start.plus({ days: 1 });
+  return {
+    localDate,
+    from: start.toUTC().toISO()!,
+    to: end.toUTC().toISO()!,
+    hours: end.diff(start, 'hours').hours
+  };
+}
+
+export function formatCentreDateTime(value: Date | string): string {
+  return centreDateTime(value).toFormat('ccc, LLL d, yyyy h:mm a');
+}
+
+export function formatCentreTime(value: Date | string): string {
+  return centreDateTime(value).toFormat('h:mm a');
+}
+
 const DURATION_MINUTES: Record<string, number> = {
   short: 45,
   standard: 60,
