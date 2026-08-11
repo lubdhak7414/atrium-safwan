@@ -64,6 +64,16 @@ function busySession(row: SessionFeedRow): Record<string, unknown> {
   };
 }
 
+function addOwnEnrolment(result: Record<string, unknown>, row: SessionFeedRow): void {
+  result.my_enrolment = row.own_enrolment_id
+    ? {
+        id: row.own_enrolment_id,
+        status: row.own_enrolment_status,
+        credits_charged: row.own_credits_charged
+      }
+    : null;
+}
+
 export async function listSessionsForCaller(
   caller: Caller | undefined,
   from: string,
@@ -115,25 +125,30 @@ export async function listSessionsForCaller(
     if (!caller || caller.kind === 'participant' || catalogue) {
       const result = publicSession(row);
       if (caller?.kind === 'participant' || caller?.kind === 'coach') {
-        result.my_enrolment = row.own_enrolment_id
-          ? {
-              id: row.own_enrolment_id,
-              status: row.own_enrolment_status,
-              credits_charged: row.own_credits_charged
-            }
-          : null;
+        addOwnEnrolment(result, row);
+      }
+      if (caller?.kind === 'coach') {
+        result.is_own_session = row.coach_id === caller.id;
       }
       return result;
     }
 
-    if (caller.kind === 'coach' && row.coach_id !== caller.id) {
+    if (caller.kind === 'coach' && row.coach_id !== caller.id && !row.own_enrolment_id) {
       return busySession(row);
+    }
+
+    if (caller.kind === 'coach' && row.coach_id !== caller.id) {
+      const result = publicSession(row);
+      addOwnEnrolment(result, row);
+      result.is_own_session = false;
+      return result;
     }
 
     return {
       ...publicSession(row),
       coach_id: row.coach_id,
-      coach_name: row.coach_name
+      coach_name: row.coach_name,
+      is_own_session: true
     };
   });
 }
