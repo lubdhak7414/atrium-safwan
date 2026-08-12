@@ -7,6 +7,7 @@ import roomRoutes from './routes/rooms';
 import peopleRoutes from './routes/people';
 import enrolmentRoutes from './routes/enrolments';
 import assistantRoutes from './routes/assistant';
+import signupRoutes from './routes/signup';
 import http from 'node:http';
 import { pool } from './db';
 import { OutboxDispatcher } from './outbox';
@@ -35,6 +36,11 @@ export function createApp(): express.Express {
   sessionSecret();
   const app = express();
 
+  const trustProxy = process.env.TRUST_PROXY;
+  if (trustProxy !== undefined && trustProxy !== '' && !/^\d+$/.test(trustProxy)) {
+    throw new Error('TRUST_PROXY must be empty or a non-negative integer hop count (e.g. 1 behind a single reverse proxy)');
+  }
+  app.set('trust proxy', trustProxy ? Number(trustProxy) : false);
   app.use(
     cors({
       origin: process.env.WEB_BASE_URL || 'http://localhost:3000',
@@ -44,9 +50,20 @@ export function createApp(): express.Express {
   app.use(express.json());
   app.use(cookieParser());
 
+  app.use((req, res, next) => {
+    const started = Date.now();
+    res.on('finish', () => {
+      if (res.statusCode >= 400) {
+        console.log(`${req.method} ${req.originalUrl} ${res.statusCode} ${Date.now() - started}ms`);
+      }
+    });
+    next();
+  });
+
   app.post('/api/login', login);
   app.post('/api/logout', logout);
   app.get('/api/me', requireSession, me);
+  app.use('/api/signup', signupRoutes);
   app.post('/api/dev/setup-token', issueSetupToken);
   app.get('/api/dev/setup-password', setupPasswordInfo);
   app.post('/api/dev/setup-password', redeemSetupToken);
