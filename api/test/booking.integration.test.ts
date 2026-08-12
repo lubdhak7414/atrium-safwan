@@ -1,29 +1,26 @@
 import crypto from 'node:crypto';
-import http from 'node:http';
 import { after, before, describe, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createApp } from '../src/index';
 import { hashPassword } from '../src/auth';
 import { pool, query } from '../src/db';
 import { assertIntegrationDatabaseConfigured, resetDatabase } from './helpers/database';
+import { login as sharedLogin, request as sharedRequest, startTestServer } from './helpers/server';
 
 assertIntegrationDatabaseConfigured();
 
 describe('booking engine integration', () => {
-  let server: http.Server;
   let baseUrl: string;
+  let closeServer: () => Promise<void>;
 
   before(async () => {
     process.env.SESSION_SECRET = process.env.SESSION_SECRET || 'booking-integration-secret';
-    server = createApp().listen(0);
-    await new Promise<void>((resolve) => server.once('listening', resolve));
-    const address = server.address();
-    assert.ok(address && typeof address === 'object');
-    baseUrl = `http://127.0.0.1:${address.port}`;
+    const server = await startTestServer();
+    baseUrl = server.baseUrl;
+    closeServer = server.close;
   });
 
   after(async () => {
-    await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+    await closeServer();
     await pool.end();
   });
 
@@ -89,21 +86,11 @@ describe('booking engine integration', () => {
   }
 
   async function login(account: { email: string; password: string }): Promise<string> {
-    const response = await fetch(`${baseUrl}/api/login`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ email: account.email, password: account.password })
-    });
-    assert.equal(response.status, 200);
-    const cookie = response.headers.get('set-cookie');
-    assert.ok(cookie);
-    return cookie.split(';')[0];
+    return sharedLogin(baseUrl, account);
   }
 
   async function request(path: string, init: RequestInit = {}, cookie?: string): Promise<Response> {
-    const headers = new Headers(init.headers);
-    if (cookie) headers.set('cookie', cookie);
-    return fetch(`${baseUrl}${path}`, { ...init, headers });
+    return sharedRequest(baseUrl, path, init, cookie);
   }
 
   function post(body?: unknown): RequestInit {
