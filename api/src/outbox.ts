@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import { MailSender, createMailer } from './mailer';
 import { pool, withTransaction } from './db';
+import { errorText, retryDelay } from './retry';
 
 type OutboxRow = {
   id: number;
@@ -16,15 +17,6 @@ type OutboxRow = {
 const LEASE_MINUTES = 5;
 const MAX_ATTEMPTS = 5;
 const POLL_MS = 5000;
-
-function retryDelay(attempt: number): number {
-  return [60, 300, 1800, 7200][Math.min(Math.max(attempt - 1, 0), 3)] * 1000;
-}
-
-function errorText(error: unknown): string {
-  const value = error instanceof Error ? error.message : String(error);
-  return value.slice(0, 2000);
-}
 
 function isPermanentFailure(error: unknown): boolean {
   const responseCode = Number((error as { responseCode?: number }).responseCode);
@@ -63,13 +55,13 @@ export class OutboxDispatcher {
          update email_outbox e
             set status = 'processing',
                 attempt_count = e.attempt_count + 1,
-                lease_until = now() + interval '${LEASE_MINUTES} minutes',
+                lease_until = now() + $3::interval,
                 lease_token = $2,
                 last_error = null
            from candidates
           where e.id = candidates.id
         returning e.id, e.event_key, e.event_type, e.recipient, e.subject, e.body, e.attempt_count, e.lease_token`,
-        [limit, crypto.randomUUID()]
+        [limit, crypto.randomUUID(), `${LEASE_MINUTES} minutes`]
       );
       return claimed.rows;
     });

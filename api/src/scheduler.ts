@@ -1,9 +1,11 @@
-import crypto from 'node:crypto';
 import cron, { ScheduledTask } from 'node-cron';
+import crypto from 'node:crypto';
 import { PoolClient } from 'pg';
 import { pool, withTransaction } from './db';
 import { addLocalDays, CENTRE_TIMEZONE, formatCentreDateTime, formatCentreTime, localDateForInstant, localDayWindow } from './time';
 import { enqueueDigestEmail } from './scheduler_email';
+import { errorText, retryDelay } from './retry';
+import { parseBoolean } from './mailer';
 
 export const COACH_DIGEST = 'coach_digest';
 export const ADMIN_DIGEST = 'admin_digest';
@@ -23,9 +25,10 @@ const LEASE_MINUTES = 5;
 
 export function schedulerEnabled(value = process.env.SCHEDULER_ENABLED): boolean {
   if (value === undefined) return true;
-  if (value === 'true') return true;
-  if (value === 'false') return false;
-  throw new Error(`SCHEDULER_ENABLED must be true or false, received ${value}`);
+  if (value !== 'true' && value !== 'false') {
+    throw new Error(`SCHEDULER_ENABLED must be true or false, received ${value}`);
+  }
+  return parseBoolean(value, false);
 }
 
 function jobReportDate(jobName: JobName, triggerDate: string): string {
@@ -34,10 +37,6 @@ function jobReportDate(jobName: JobName, triggerDate: string): string {
 
 function jobInitialWatermark(jobName: JobName, activationDay: string): string {
   return jobName === COACH_DIGEST ? activationDay : addLocalDays(activationDay, -1);
-}
-
-function errorText(error: unknown): string {
-  return (error instanceof Error ? error.message : String(error)).slice(0, 2000);
 }
 
 async function materializeCoachDigest(client: PoolClient, reportDate: string): Promise<void> {
@@ -245,12 +244,12 @@ export class Scheduler {
         if (new Date(run.available_at).getTime() > now.getTime()) return;
         if (run.attempts >= MAX_JOB_ATTEMPTS) return;
 
-        const leaseToken = cryptoRandomUuid();
+        const leaseToken = crypto.randomUUID();
         await client.query(
           `update job_run set status = 'processing', attempts = attempts + 1,
-                 lease_until = $2::timestamptz + interval '${LEASE_MINUTES} minutes', lease_token = $3, last_error = null
+                 lease_until = $2::timestamptz + $4::interval, lease_token = $3, last_error = null
            where id = $1`,
-          [run.id, now, leaseToken]
+          [run.id, now, leaseToken, `${LEASE_MINUTES} minutes`]
         );
 
         await client.query('savepoint phase5_materialize');
@@ -302,14 +301,6 @@ export class Scheduler {
     this.task = undefined;
     if (this.inFlight) await this.inFlight;
   }
-}
-
-function cryptoRandomUuid(): string {
-  return crypto.randomUUID();
-}
-
-function retryDelay(attempt: number): number {
-  return [60, 300, 1800, 7200][Math.min(Math.max(attempt - 1, 0), 3)] * 1000;
 }
 
 export async function reconcileScheduler(now = new Date()): Promise<void> {
