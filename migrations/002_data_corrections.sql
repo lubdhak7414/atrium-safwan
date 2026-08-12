@@ -1,3 +1,5 @@
+-- Seed-data corrections
+--  correct fractional credits, durations, opening-hours breaches, overlaps, over-capacity and cancellation defects in place (no rows deleted).
 alter table session
   add column if not exists cancelled_at timestamptz,
   add column if not exists cancelled_by_person_id integer references person(id);

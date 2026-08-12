@@ -1,3 +1,5 @@
+-- Schema hardening
+--  integer credits, constraints, exclusion constraint for room conflicts, indexes, outbox/job_run/setup-token tables.
 alter table person
   alter column credits type integer using round(credits)::integer,
   alter column email set not null,
