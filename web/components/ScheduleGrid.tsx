@@ -7,11 +7,16 @@ const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'
 const hours = Array.from({ length: 14 }, (_, index) => index + 7);
 
 export function ScheduleGrid({ sessions, weekStart, role, showCoach = false, onSelect }: { sessions: Session[]; weekStart: ReturnType<typeof inCentreTimezone>; role: Role; showCoach?: boolean; onSelect?: (session: Session) => void }) {
-  function sessionsFor(dayIndex: number, hour: number) {
-    return sessions.filter((session) => {
-      const start = inCentreTimezone(session.starts_at);
-      return start.weekday === dayIndex + 1 && start.hasSame(weekStart.plus({ days: dayIndex }), 'day') && start.hour === hour;
-    });
+  const sessionsByCell = new Map<string, Session[]>();
+  for (const session of sessions) {
+    const start = inCentreTimezone(session.starts_at);
+    for (let dayIndex = 0; dayIndex < 7; dayIndex += 1) {
+      if (start.weekday === dayIndex + 1 && start.hasSame(weekStart.plus({ days: dayIndex }), 'day')) {
+        const key = `${dayIndex}|${start.hour}`;
+        sessionsByCell.set(key, [...(sessionsByCell.get(key) ?? []), session]);
+        break;
+      }
+    }
   }
 
   return (
@@ -30,7 +35,7 @@ export function ScheduleGrid({ sessions, weekStart, role, showCoach = false, onS
             <tr key={hour}>
               <th className="time-column mono">{String(hour).padStart(2, '0')}:00</th>
               {days.map((day, index) => {
-                const entries = sessionsFor(index, hour);
+                const entries = sessionsByCell.get(`${index}|${hour}`) ?? [];
                 return (
                   <td key={day} className={index === 6 ? 'schedule-sunday' : undefined}>
                     {index === 6 ? <span className="closed-label">CLOSED</span> : entries.map((session) => {

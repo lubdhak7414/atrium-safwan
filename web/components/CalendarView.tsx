@@ -68,12 +68,13 @@ export function CalendarView({ role }: { role: Role }) {
       </div>
       {state === 'loading' && <p className="state-line">LOADING CALENDAR...</p>}
       {state === 'error' && <p className="error-line">{error}</p>}
+      {state === 'error' && <button type="button" onClick={() => setRefreshVersion((version) => version + 1)}>TRY AGAIN</button>}
       {state === 'ready' && visibleSessions.length === 0 && <p className="empty-line">{showPublicSchedule ? 'NO SESSIONS IN THIS WEEK.' : 'NO PERSONAL SESSIONS IN THIS WEEK.'}</p>}
       {state === 'ready' && <ScheduleGrid sessions={visibleSessions} weekStart={weekStart} role={role} showCoach={role === 'admin'} onSelect={(session) => router.push(`/sessions/${session.id}`)} />}
       {role === 'participant' && state === 'ready' && (
         <div className="calendar-lower-grid">
           <SessionTable title="MY BOOKINGS" sessions={ownBookings} allSessions={sessions} actionRole="participant" onChanged={() => setRefreshVersion((version) => version + 1)} onOpen={(id) => router.push(`/sessions/${id}`)} />
-          <SessionTable title="PUBLIC SCHEDULE" sessions={showPublicSchedule ? sessions : []} allSessions={sessions} actionRole="participant" onChanged={() => setRefreshVersion((version) => version + 1)} onOpen={(id) => router.push(`/sessions/${id}`)} />
+          <SessionTable title="PUBLIC SCHEDULE" sessions={showPublicSchedule ? sessions : []} allSessions={sessions} actionRole="participant" emptyHint={showPublicSchedule ? undefined : 'Enable "Show public schedule" above to see the public feed.'} onChanged={() => setRefreshVersion((version) => version + 1)} onOpen={(id) => router.push(`/sessions/${id}`)} />
         </div>
       )}
       {role === 'coach' && state === 'ready' && (
@@ -86,18 +87,21 @@ export function CalendarView({ role }: { role: Role }) {
   );
 }
 
-function SessionTable({ title, sessions, allSessions = sessions, actionRole, onChanged, onOpen }: { title: string; sessions: Session[]; allSessions?: Session[]; actionRole?: 'participant' | 'coach'; onChanged?: () => void; onOpen?: (sessionId: number) => void }) {
+function SessionTable({ title, sessions, allSessions = sessions, actionRole, emptyHint, onChanged, onOpen }: { title: string; sessions: Session[]; allSessions?: Session[]; actionRole?: 'participant' | 'coach'; emptyHint?: string; onChanged?: () => void; onOpen?: (sessionId: number) => void }) {
   const [openDetailId, setOpenDetailId] = useState<number | null>(null);
   return (
     <section className="data-panel">
       <h3>{title}</h3>
-      {sessions.length === 0 ? <p className="muted">NONE RECORDED FOR THIS WEEK.</p> : (
+      {sessions.length === 0 ? <p className="muted">{emptyHint ?? 'NONE RECORDED FOR THIS WEEK.'}</p> : (
         <>
         <div className="table-scroll">
           <table>
             <thead><tr><th>SESSION</th><th>WHEN</th><th>ROOM</th><th>{actionRole === 'participant' ? 'FEE / PLACES' : 'STATUS'}</th>{actionRole && <th>ACTION</th>}</tr></thead>
             <tbody>{sessions.map((session) => (
-               <tr key={session.id} className={`calendar-row calendar-row-${sessionViewKind(actionRole === 'coach' ? 'coach' : 'participant', session)}${onOpen ? ' clickable-row' : ''}`} onClick={onOpen ? () => onOpen(session.id) : undefined}>
+               <tr key={session.id} className={`calendar-row calendar-row-${sessionViewKind(actionRole === 'coach' ? 'coach' : 'participant', session)}${onOpen ? ' clickable-row' : ''}`} onClick={onOpen ? () => onOpen(session.id) : undefined}
+                   tabIndex={onOpen ? 0 : undefined}
+                   role={onOpen ? 'button' : undefined}
+                   onKeyDown={onOpen ? (event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onOpen(session.id); } } : undefined}>
                  <td><span className="session-kind-label">{session.visibility === 'busy' ? 'PUBLIC' : sessionViewKind(actionRole === 'coach' ? 'coach' : 'participant', session).toUpperCase()}</span><br /><strong>{session.visibility === 'busy' ? 'OCCUPIED' : session.discipline}</strong><br /><span className="muted">#{session.id} · {session.session_type}</span></td>
                 <td className="mono">{formatCentreDate(session.starts_at)}<br />{formatCentreTime(session.starts_at)}–{formatCentreTime(session.ends_at)}</td>
                 <td>{session.room_name}</td>
