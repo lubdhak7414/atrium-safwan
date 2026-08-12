@@ -22,10 +22,11 @@ function CoachWorkspace() {
 
   return (
     <main className="page-shell">
+      <header className="title-block"><div className="title-block-main"><h1>Coach dashboard</h1></div></header>
       <section className="summary-grid">
         <div className="metric-panel"><span className="eyebrow">COACH</span><strong>{user?.full_name ?? 'LOADING...'}</strong><span className="muted">{user?.email}</span></div>
         <div className="metric-panel"><span className="eyebrow">ROOM CREDITS</span><strong className="metric-value mono">{user?.credits ?? '—'}</strong><span className="muted">Available balance</span></div>
-        <div className="metric-panel"><span className="eyebrow">BUSY SLOTS</span><strong>ANONYMOUS</strong><span className="muted">Schedule availability</span></div>
+        <div className="metric-panel"><span className="eyebrow">CALENDAR</span><strong>WEEKLY</strong><span className="muted">Your sessions and other busy slots</span></div>
       </section>
       <CalendarView role="coach" />
       <SessionCatalogue sourcePath={cataloguePath} title="BOOK AS AN ATTENDEE" bookingRole="coach" />

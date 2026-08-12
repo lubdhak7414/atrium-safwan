@@ -51,6 +51,10 @@ export default function SessionDetailPage() {
       return;
     }
     if (userStatus !== 'ready') return;
+    if (!role) {
+      setState('ready');
+      return;
+    }
     let active = true;
     const controller = new AbortController();
     setState('loading');
@@ -95,7 +99,6 @@ export default function SessionDetailPage() {
   return (
     <main className="page-shell narrow-shell">
       <header className="title-block">
-        <div className="title-block-brand">ATRIUM COACHING CENTRE</div>
         <div className="title-block-main">
           <h1>Session #{sessionId}</h1>
           <div className="title-block-meta">{role ? role.toUpperCase() : 'SIGNED OUT'} / SESSION DETAIL</div>
