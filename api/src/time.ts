@@ -1,6 +1,9 @@
 import { DateTime } from 'luxon';
+import { SESSION_FEE_SCHEDULE } from './credits';
 
 export const CENTRE_TIMEZONE = process.env.CENTRE_TIMEZONE || 'America/New_York';
+
+export const BOOKING_NOTICE_MS = 48 * 60 * 60 * 1000;
 
 export type LocalDayWindow = {
   localDate: string;
@@ -47,11 +50,9 @@ export function formatCentreTime(value: Date | string): string {
   return centreDateTime(value).toFormat('h:mm a');
 }
 
-const DURATION_MINUTES: Record<string, number> = {
-  short: 45,
-  standard: 60,
-  intensive: 210
-};
+const DURATION_MINUTES: Record<string, number> = Object.fromEntries(
+  Object.entries(SESSION_FEE_SCHEDULE).map(([sessionType, schedule]) => [sessionType, schedule.durationMinutes])
+);
 
 export type LocalSessionInput = {
   localDate: string;
@@ -97,7 +98,7 @@ export function parseLocalSessionWindow(
   if (ends.diff(starts, 'minutes').minutes !== expectedMinutes) {
     return `${input.sessionType} sessions must last ${expectedMinutes} minutes`;
   }
-  if (starts.toMillis() < now.getTime() + 48 * 60 * 60 * 1000) {
+  if (starts.toMillis() < now.getTime() + BOOKING_NOTICE_MS) {
     return 'sessions must start at least 48 hours from now';
   }
   if (starts.weekday === 7 || ends.weekday === 7) return 'the centre is closed on Sundays';
@@ -131,7 +132,7 @@ export function validateSessionWindow(
   if (!expectedMinutes || ends.diff(starts, 'minutes').minutes !== expectedMinutes) {
     return `${sessionType} sessions must last ${expectedMinutes ?? 'the configured'} minutes`;
   }
-  if (starts.toMillis() < now.getTime() + 48 * 60 * 60 * 1000) {
+  if (starts.toMillis() < now.getTime() + BOOKING_NOTICE_MS) {
     return 'sessions must start at least 48 hours from now';
   }
 
