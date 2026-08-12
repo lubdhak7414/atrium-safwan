@@ -1,32 +1,29 @@
 import crypto from 'node:crypto';
-import http from 'node:http';
 import net from 'node:net';
 import { after, before, describe, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createApp } from '../src/index';
 import { hashPassword } from '../src/auth';
 import { pool, query } from '../src/db';
 import { assertIntegrationDatabaseConfigured, resetDatabase } from './helpers/database';
+import { startTestServer } from './helpers/server';
 
 assertIntegrationDatabaseConfigured();
 
 describe('authentication integration', () => {
-  let server: http.Server;
   let baseUrl: string;
   let port: number;
+  let closeServer: () => Promise<void>;
 
   before(async () => {
     process.env.SESSION_SECRET = process.env.SESSION_SECRET || 'integration-test-secret';
-    server = createApp().listen(0);
-    await new Promise<void>((resolve) => server.once('listening', resolve));
-    const address = server.address();
-    assert.ok(address && typeof address === 'object');
-    port = address.port;
-    baseUrl = `http://127.0.0.1:${port}`;
+    const server = await startTestServer();
+    baseUrl = server.baseUrl;
+    port = Number(new URL(baseUrl).port);
+    closeServer = server.close;
   });
 
   after(async () => {
-    await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+    await closeServer();
     await pool.end();
   });
 
@@ -217,5 +214,42 @@ describe('authentication integration', () => {
     } finally {
       process.env.NODE_ENV = oldNodeEnv;
     }
+  });
+
+  test('self-signup creates a participant with starter credits, a setup token, and the setup email together', async () => {
+    await resetDatabase();
+    const email = `${crypto.randomUUID()}@signup.local`;
+    const response = await post('/api/signup', { email, full_name: 'Self Signed Up' });
+    assert.equal(response.status, 200);
+    assert.equal((await response.json()).status, 'received');
+
+    const people = await query<{ id: number; credits: number; kind: string; password_hash: string }>(
+      'select id, credits, kind, password_hash from person where email = $1',
+      [email]
+    );
+    assert.equal(people.length, 1);
+    assert.equal(Number(people[0].credits), 4000);
+    assert.equal(people[0].kind, 'participant');
+    assert.match(people[0].password_hash, /^\$argon2id\$/);
+    assert.equal((await query('select token_hash from password_setup_token where person_id = $1', [people[0].id])).length, 1);
+    assert.equal(
+      (await query("select recipient from email_outbox where recipient = $1 and event_type = 'participant.account_setup'", [email])).length,
+      1
+    );
+  });
+
+  test('self-signup with an existing email attaches nothing and reveals nothing', async () => {
+    const account = await fixture();
+    const before = await query<{ count: string }>('select count(*)::text as count from person');
+    const response = await post('/api/signup', { email: account.email, full_name: 'Existing Address Probe' });
+    assert.equal(response.status, 200);
+    assert.equal((await response.json()).status, 'received');
+    assert.equal((await query<{ count: string }>('select count(*)::text as count from person'))[0].count, before[0].count);
+    assert.equal((await query('select token_hash from password_setup_token')).length, 0);
+  });
+
+  test('self-signup rejects malformed emails', async () => {
+    const response = await post('/api/signup', { email: 'not-an-email', full_name: 'Probe' });
+    assert.equal(response.status, 400);
   });
 });
