@@ -1,8 +1,10 @@
 import { PoolClient } from 'pg';
+import type { Response } from 'express';
 import crypto from 'node:crypto';
 import { Caller } from './permissions';
 import { withTransaction } from './db';
 import { createSetupTokenForClient, hashPassword } from './auth';
+import { webBaseUrl } from './config';
 import {
   hoursOfNotice,
   participantRefundPercent,
@@ -13,6 +15,7 @@ import {
 } from './credits';
 import { formatCentreDateTime, parseLocalSessionWindow } from './time';
 import { INITIAL_CREDITS } from './credits';
+import { EMAIL_PATTERN } from './validation';
 
 export class DomainError extends Error {
   constructor(public readonly status: number, message: string) {
@@ -76,6 +79,16 @@ export function responseError(error: unknown): { status: number; message: string
   if (code === '23514') return { status: 409, message: 'the requested change violates a booking rule' };
   if (code === '23503') return { status: 400, message: 'the requested record does not exist' };
   return null;
+}
+
+export function sendError(res: Response, error: unknown, fallback = 'could not complete the request'): void {
+  const mapped = responseError(error);
+  if (mapped) {
+    res.status(mapped.status).json({ error: mapped.message });
+    return;
+  }
+  console.error(error);
+  res.status(500).json({ error: fallback });
 }
 
 async function databaseNow(client: PoolClient): Promise<Date> {
@@ -362,8 +375,6 @@ export type AnonymousBookingInput = {
   fullName: string;
 };
 
-const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
 export async function enrolAnonymous(input: AnonymousBookingInput): Promise<{ status: 'received' }> {
   const email = input.email.trim().toLowerCase();
   const fullName = input.fullName.trim() || email.slice(0, email.indexOf('@'));
@@ -381,6 +392,14 @@ export async function enrolAnonymous(input: AnonymousBookingInput): Promise<{ st
       // Hash before the existence check so both paths pay the password-work cost.
       const randomPassword = crypto.randomBytes(32).toString('base64url');
       const passwordHash = await hashPassword(randomPassword);
+
+      // Session-level refusals (full room, etc.) must be identical for existing
+      // and new emails, or the response itself reveals whether an account exists.
+      const rooms = await client.query('select capacity from room where id = $1', [session.room_id]);
+      if (rooms.rowCount === 0) badRequest('no such room');
+      const count = await activeParticipantCount(client, input.sessionId, session.coach_id);
+      if (count >= Number(rooms.rows[0].capacity)) conflict('that session is full');
+
       const existing = await client.query('select id from person where lower(email) = lower($1) for update', [email]);
       if (existing.rowCount !== 0) {
         // Do not disclose whether an account exists or issue a token from an email alone.
@@ -395,10 +414,6 @@ export async function enrolAnonymous(input: AnonymousBookingInput): Promise<{ st
       );
       const personId = Number(participant.rows[0].id);
 
-      const rooms = await client.query('select capacity from room where id = $1', [session.room_id]);
-      if (rooms.rowCount === 0) badRequest('no such room');
-      const count = await activeParticipantCount(client, input.sessionId, session.coach_id);
-      if (count >= Number(rooms.rows[0].capacity)) conflict('that session is full');
       await checkCommitments(client, [personId], iso(session.starts_at), iso(session.ends_at), [input.sessionId]);
 
       const debited = await client.query(
@@ -412,7 +427,6 @@ export async function enrolAnonymous(input: AnonymousBookingInput): Promise<{ st
         [input.sessionId, personId, session.seat_fee_credits]
       );
       const setup = await createSetupTokenForClient(client, personId);
-      const webBase = process.env.WEB_BASE_URL || 'http://localhost:3000';
       await enqueueEmail(
         client,
         `account-setup:${personId}`,
@@ -422,7 +436,7 @@ export async function enrolAnonymous(input: AnonymousBookingInput): Promise<{ st
         `Your Atrium booking is confirmed for ${session.discipline} on ${formatCentreDateTime(session.starts_at)}.
 
 Set your password here within 30 minutes:
-${webBase}/setup-password?token=${encodeURIComponent(setup.token)}
+${webBaseUrl()}/setup-password?token=${encodeURIComponent(setup.token)}
 
 Booking reference: ${inserted.rows[0].id}`
       );
