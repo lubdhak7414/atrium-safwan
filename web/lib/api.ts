@@ -1,7 +1,11 @@
 export const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:4000';
 
 export class ApiError extends Error {
-  constructor(public readonly status: number, message: string) {
+  constructor(
+    public readonly status: number,
+    message: string,
+    public readonly suggestions?: string[]
+  ) {
     super(message);
     this.name = 'ApiError';
   }
@@ -22,7 +26,11 @@ export async function fetchJson<T>(path: string, init: RequestInit = {}): Promis
     const message = payload && typeof payload === 'object' && 'error' in payload
       ? String(payload.error)
       : `Request failed (${response.status})`;
-    throw new ApiError(response.status, message);
+    const rawSuggestions = payload && typeof payload === 'object' && Array.isArray((payload as { suggestions?: unknown }).suggestions)
+      ? (payload as { suggestions: unknown[] }).suggestions
+      : undefined;
+    const suggestions = rawSuggestions?.filter((item): item is string => typeof item === 'string');
+    throw new ApiError(response.status, message, suggestions);
   }
   return payload as T;
 }
