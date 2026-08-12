@@ -1,4 +1,10 @@
+import type { Metadata } from 'next';
 import { PolicyMatrix } from '../../components/PolicyMatrix';
+
+export const metadata: Metadata = {
+  title: 'Pricing & policies',
+  description: 'Atrium Coaching Centre fees, refund tiers and booking deadlines for coaches and participants.'
+};
 
 export default function PoliciesPage() {
   return (

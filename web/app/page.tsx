@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import { fetchJson } from '../lib/api';
 import { nowInCentre, toApiIso } from '../lib/time';
@@ -7,6 +8,11 @@ import { AccountOverview } from '../components/AccountOverview';
 import { SessionCatalogue } from '../components/SessionCatalogue';
 
 export const dynamic = 'force-dynamic';
+
+export const metadata: Metadata = {
+  title: 'Atrium Coaching Centre',
+  description: 'Book coaching sessions at Atrium — compare upcoming classes by time, room, price and places remaining, then reserve a place.'
+};
 
 export default async function HomePage() {
   const from = nowInCentre();
@@ -23,11 +29,10 @@ export default async function HomePage() {
   }
 
   return (
-    <main className="page-shell home-shell">
+    <main className="page-shell">
       <div className="home-top-grid">
         <section className="hero-panel hero-panel-no-preview">
           <div className="hero-copy">
-            <p className="eyebrow">ATRIUM COACHING CENTRE</p>
             <h1>Book coaching that fits your week.<br />Plan with confidence.</h1>
             <p>Compare upcoming sessions by time, room, price, and places remaining before you book. Coaches reserve rooms to teach; participants reserve places to learn.</p>
             <p>Open Monday to Saturday, 07:00–21:00 centre time.</p>
