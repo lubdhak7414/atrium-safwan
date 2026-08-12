@@ -4,6 +4,7 @@ import argon2 from 'argon2';
 import { z } from 'zod';
 import { query } from './db';
 import { withTransaction } from './db';
+import { webBaseUrl } from './config';
 import { Role } from './permissions';
 import { parseRequest } from './validation';
 
@@ -267,9 +268,8 @@ export async function issueSetupToken(req: Request, res: Response): Promise<void
     }
 
     const { token, expiresAt } = await createSetupTokenForPerson(people[0].id);
-    const webBase = process.env.WEB_BASE_URL || 'http://localhost:3000';
     res.json({
-      setup_url: `${webBase}/setup-password?token=${encodeURIComponent(token)}`,
+      setup_url: `${webBaseUrl()}/setup-password?token=${encodeURIComponent(token)}`,
       expires_at: expiresAt.toISOString()
     });
   } catch (err) {
@@ -371,21 +371,6 @@ export function logout(_req: Request, res: Response): void {
   res.json({ signed_out: true });
 }
 
-export async function me(_req: Request, res: Response): Promise<void> {
-  try {
-    const people = await query(
-      'select id, email, full_name, kind, credits, active from person where id = $1',
-      [res.locals.personId]
-    );
-
-    if (people.length === 0) {
-      res.status(401).json({ error: 'not signed in' });
-      return;
-    }
-
-    res.json(people[0]);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'could not load the current user' });
-  }
+export function me(_req: Request, res: Response): void {
+  res.json(res.locals.person);
 }
