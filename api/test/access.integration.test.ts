@@ -1,29 +1,26 @@
 import crypto from 'node:crypto';
-import http from 'node:http';
 import { after, before, describe, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createApp } from '../src/index';
 import { hashPassword } from '../src/auth';
 import { pool, query } from '../src/db';
 import { assertIntegrationDatabaseConfigured, resetDatabase } from './helpers/database';
+import { login as sharedLogin, request as sharedRequest, startTestServer } from './helpers/server';
 
 assertIntegrationDatabaseConfigured();
 
 describe('access-control integration', () => {
-  let server: http.Server;
   let baseUrl: string;
+  let closeServer: () => Promise<void>;
 
   before(async () => {
     process.env.SESSION_SECRET = process.env.SESSION_SECRET || 'integration-test-secret';
-    server = createApp().listen(0);
-    await new Promise<void>((resolve) => server.once('listening', resolve));
-    const address = server.address();
-    assert.ok(address && typeof address === 'object');
-    baseUrl = `http://127.0.0.1:${address.port}`;
+    const server = await startTestServer();
+    baseUrl = server.baseUrl;
+    closeServer = server.close;
   });
 
   after(async () => {
-    await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+    await closeServer();
     await pool.end();
   });
 
@@ -88,21 +85,11 @@ describe('access-control integration', () => {
   }
 
   async function login(account: { email: string; password: string }): Promise<string> {
-    const response = await fetch(`${baseUrl}/api/login`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ email: account.email, password: account.password })
-    });
-    assert.equal(response.status, 200);
-    const cookie = response.headers.get('set-cookie');
-    assert.ok(cookie);
-    return cookie.split(';')[0];
+    return sharedLogin(baseUrl, account);
   }
 
   async function request(path: string, init: RequestInit = {}, cookie?: string): Promise<Response> {
-    const headers = new Headers(init.headers);
-    if (cookie) headers.set('cookie', cookie);
-    return fetch(`${baseUrl}${path}`, { ...init, headers });
+    return sharedRequest(baseUrl, path, init, cookie);
   }
 
   test('catalogue and detail views do not leak coach or attendee identity', async () => {
@@ -359,5 +346,55 @@ describe('access-control integration', () => {
     await query("update session set status = 'completed' where id = $1", [data.otherSessionId]);
     const completedCancellation = await request(`/api/sessions/${data.otherSessionId}/cancel`, { method: 'POST' }, adminCookie);
     assert.equal(completedCancellation.status, 409);
+  });
+
+  test('only an administrator can issue a coach account', async () => {
+    const data = await fixture();
+    const email = `${crypto.randomUUID()}@coach.local`;
+
+    const coachCookie = await login(data.coach);
+    const deniedForCoach = await request('/api/people', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email, full_name: 'Attempted Coach Issue' })
+    }, coachCookie);
+    assert.equal(deniedForCoach.status, 403);
+
+    const participantCookie = await login(data.participant);
+    const deniedForParticipant = await request('/api/people', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email, full_name: 'Attempted Coach Issue' })
+    }, participantCookie);
+    assert.equal(deniedForParticipant.status, 403);
+    assert.equal((await query('select count(*)::text as count from person where email = $1', [email]))[0].count, '0');
+
+    const adminCookie = await login(data.admin);
+    const created = await request('/api/people', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email, full_name: 'Issued Coach' })
+    }, adminCookie);
+    assert.equal(created.status, 201);
+    const createdBody = await created.json();
+    assert.equal(createdBody.person.kind, 'coach');
+    assert.equal(Number(createdBody.person.credits), 2000);
+    assert.match(createdBody.setup_url, /\/setup-password\?token=/);
+
+    const coachRows = await query<{ credits: number; password_hash: string }>('select credits, password_hash from person where email = $1', [email]);
+    assert.equal(Number(coachRows[0].credits), 2000);
+    assert.match(coachRows[0].password_hash, /^\$argon2id\$/);
+    assert.equal((await query('select token_hash from password_setup_token')).length, 1);
+    assert.equal(
+      (await query("select recipient from email_outbox where recipient = $1 and event_type = 'coach.account_setup'", [email])).length,
+      1
+    );
+
+    const duplicate = await request('/api/people', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email, full_name: 'Duplicate Coach' })
+    }, adminCookie);
+    assert.equal(duplicate.status, 409);
   });
 });
