@@ -47,6 +47,7 @@ const tokenBody = await tokenResponse.json();
 const token = tokenBody?.setup_url?.match(/token=([^&]+)/)?.[1];
 if (!tokenResponse.ok || !token) {
   console.error(`could not issue a setup token: ${JSON.stringify(tokenBody)}`);
+  console.error('is the API running in development? (npm run dev:api) — setup tokens are loopback-only.');
   process.exit(1);
 }
 
