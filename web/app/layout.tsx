@@ -19,7 +19,8 @@ const plexMono = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'Atrium'
+  title: { template: '%s · Atrium', default: 'Atrium Coaching Centre' },
+  description: 'Book coaching sessions at Atrium Coaching Centre — browse upcoming classes, compare prices, and reserve a place.'
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
