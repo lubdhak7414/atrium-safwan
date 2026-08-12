@@ -1,3 +1,5 @@
+-- Phase 6
+--  is_promoted flag for the public page.
 alter table session
   add column is_promoted boolean not null default false;
 

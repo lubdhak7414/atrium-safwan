@@ -1,3 +1,5 @@
+-- Phase 5 hardening
+--  outbox lease columns and scheduler job tables.
 alter table email_outbox
   add column lease_token uuid,
   add column failed_at timestamptz;
