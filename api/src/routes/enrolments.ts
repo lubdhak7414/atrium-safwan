@@ -1,28 +1,16 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { requireSession } from '../auth';
-import { parseRequest } from '../validation';
-import { cancelBooking, changeBooking, responseError } from '../booking';
+import { emptyBodySchema, parseRequest, positiveIdSchema } from '../validation';
+import { cancelBooking, changeBooking, sendError } from '../booking';
 
 const router = Router();
-const enrolmentIdSchema = z.coerce.number().int().positive();
 const changeBookingSchema = z.object({
   destination_session_id: z.number().int().positive()
 }).strict();
-const emptyBodySchema = z.object({}).strict().optional();
 
-function sendError(res: any, error: unknown, fallback: string): void {
-  const mapped = responseError(error);
-  if (mapped) {
-    res.status(mapped.status).json({ error: mapped.message });
-    return;
-  }
-  console.error(error);
-  res.status(500).json({ error: fallback });
-}
-
-function parseId(value: unknown, res: any): number | null {
-  const parsed = enrolmentIdSchema.safeParse(value);
+function parseId(value: unknown, res: { status: (code: number) => { json: (body: unknown) => void } }): number | null {
+  const parsed = positiveIdSchema.safeParse(value);
   if (!parsed.success) {
     res.status(404).json({ error: 'no such enrolment' });
     return null;

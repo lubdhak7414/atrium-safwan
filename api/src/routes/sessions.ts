@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { requireRole, requireSession, optionalSession } from '../auth';
-import { parseRequest } from '../validation';
+import { emptyBodySchema, parseRequest, positiveIdSchema } from '../validation';
 import { query } from '../db';
 import { getSessionForCaller, listSessionsForCaller } from '../permissions';
 import { DISCIPLINES } from '../credits';
@@ -12,12 +12,11 @@ import {
   createSession,
   enrolSession,
   reassignSession,
-  responseError,
-  rescheduleSession
+  rescheduleSession,
+  sendError
 } from '../booking';
 
 const router = Router();
-const sessionIdSchema = z.coerce.number().int().positive();
 const localDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const localTimeSchema = z.string().regex(/^\d{2}:\d{2}$/);
 
@@ -57,8 +56,6 @@ const reassignSchema = z.object({
   coach_id: z.number().int().positive()
 }).strict();
 
-const emptyBodySchema = z.object({}).strict().optional();
-
 async function queryPromotion(sessionId: number, promoted: boolean): Promise<Record<string, unknown> | null> {
   const rows = await query<{ id: number; is_promoted: boolean }>(
     'update session set is_promoted = $1 where id = $2 returning id, is_promoted',
@@ -67,18 +64,8 @@ async function queryPromotion(sessionId: number, promoted: boolean): Promise<Rec
   return rows[0] ?? null;
 }
 
-function sendError(res: any, error: unknown, fallback: string): void {
-  const mapped = responseError(error);
-  if (mapped) {
-    res.status(mapped.status).json({ error: mapped.message });
-    return;
-  }
-  console.error(error);
-  res.status(500).json({ error: fallback });
-}
-
-function parseId(value: unknown, res: any): number | null {
-  const parsed = sessionIdSchema.safeParse(value);
+function parseId(value: unknown, res: { status: (code: number) => { json: (body: unknown) => void } }): number | null {
+  const parsed = positiveIdSchema.safeParse(value);
   if (!parsed.success) {
     res.status(404).json({ error: 'no such session' });
     return null;
