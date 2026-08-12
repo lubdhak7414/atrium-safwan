@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { fetchJson, ApiError } from '../../lib/api';
 import { useCurrentUser } from '../../components/CurrentUserProvider';
 import type { Role } from '../../lib/types';
@@ -54,7 +55,7 @@ export default function Login() {
   if (userStatus === 'loading' || (userStatus === 'ready' && user)) {
     return (
       <main className="page-shell narrow-shell">
-        <p className="state-line">REDIRECTING TO YOUR DASHBOARD...</p>
+        <p className="state-line">REDIRECTING TO YOUR {user ? user.kind.toUpperCase() : 'ACCOUNT'} AREA...</p>
       </main>
     );
   }
@@ -63,11 +64,11 @@ export default function Login() {
     <main className="page-shell narrow-shell">
       <section className="form-panel">
         <p className="eyebrow">ACCOUNT ACCESS</p>
-        <h2>Sign in to the operational desk</h2>
+        <h1>Sign in to the operational desk</h1>
         <form onSubmit={onSubmit}>
           <label>
             <span>Email</span>
-            <input required type="email" name="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} />
+            <input required type="email" name="email" autoComplete="email" autoFocus value={email} onChange={(event) => setEmail(event.target.value)} />
           </label>
           <label>
             <span>Password</span>
@@ -75,6 +76,7 @@ export default function Login() {
           </label>
           {error && <p className="error-line" role="alert">{error}</p>}
           <button type="submit" disabled={loading || !email.trim() || !password}>{loading ? 'CHECKING...' : 'SIGN IN'}</button>
+          <p className="muted">New to Atrium? <Link href="/signup">Create a participant account</Link>.</p>
         </form>
       </section>
     </main>

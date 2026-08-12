@@ -84,7 +84,7 @@ function SetupPasswordForm() {
         <h2>Password set</h2>
         <p className="success-line" role="status">Your password has been set for {account?.email}.</p>
         <p><Link className="button-link" href="/login">GO TO SIGN IN</Link>{' '}
-        <button type="button" className="nav-signout" onClick={() => router.push('/')}>BACK TO CATALOGUE</button></p>
+        <button type="button" className="secondary-button" onClick={() => router.push('/')}>BACK TO CATALOGUE</button></p>
       </section>
     );
   }
@@ -115,10 +115,8 @@ export default function SetupPasswordPage() {
   return (
     <main className="page-shell narrow-shell">
       <header className="title-block">
-        <div className="title-block-brand">ATRIUM COACHING CENTRE</div>
         <div className="title-block-main">
           <h1>Set your password</h1>
-          <div className="title-block-meta">SECURE ACCOUNT SETUP / SINGLE USE</div>
         </div>
       </header>
       <Suspense fallback={<p className="state-line">LOADING...</p>}>
