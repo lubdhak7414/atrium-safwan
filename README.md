@@ -34,6 +34,9 @@ cp env.example .env
 #   - set DATABASE_URL and TEST_DATABASE_URL for your machine
 #   - replace SESSION_SECRET (the API refuses to boot on the default "change-me")
 #   - NEXT_PUBLIC_API_BASE_URL stays http://localhost:4000 in dev
+#   - TRUST_PROXY: leave empty when the API is reached directly; set the hop
+#     count (e.g. 1) when it sits behind a reverse proxy so per-IP rate limits
+#     see the real client address
 
 # 3. Install and migrate (idempotent — a second run is a no-op)
 npm install
@@ -84,7 +87,7 @@ Day windows are local-midnight to local-midnight via Luxon, so the 25-hour day o
 
 ### Assistant
 
-`MODEL_PROVIDER=stub` (default, deterministic) or `ollama` (needs `MODEL_BASE_URL`/`MODEL_NAME`; `MODEL_API_KEY` is reserved for a future hosted provider). One endpoint, `POST /api/assistant`, caller identity from the session cookie only — anonymous, participant, coach and admin get different answers to the same question because each tool runs a permission-filtered query as the caller. The model only ever sees tool results, never raw tables. Try it at `/assistant`.
+`MODEL_PROVIDER=stub` (default, deterministic) or `ollama` (needs `MODEL_BASE_URL`/`MODEL_NAME`; `MODEL_API_KEY` is reserved for a future hosted provider). One endpoint, `POST /api/assistant`, caller identity from the session cookie only — anonymous, participant, coach and admin get different answers to the same question because each tool runs a permission-filtered query as the caller. The model only ever sees tool results, never raw tables. With `ollama` the assistant also drafts a natural-language reply from the permission-filtered tool result (the tool layer alone decides what data exists, so refusals stay structural); the stub returns deterministic canned replies so tests need no live model. A generic session request ("show upcoming sessions") asks whether you want all sessions or one discipline — say "show all upcoming sessions" (or name a discipline, e.g. "show fitness sessions") to list them. If the model picks an admin-only action the caller's role cannot use, the assistant degrades gracefully to the sessions that caller *can* see rather than leaving them stuck. The page renders sessions as a compact role-aware table (ID, discipline · type, centre date & time, details) and other records as tables too. Try it at `/assistant`.
 
 ### Tests
 
