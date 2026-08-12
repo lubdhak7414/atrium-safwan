@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { RoleGuard } from '../../../components/RoleGuard';
 import { fetchJson } from '../../../lib/api';
 import { useCurrentUser } from '../../../components/CurrentUserProvider';
+import { INITIAL_CREDITS } from '../../../../api/src/credits';
 import type { Person } from '../../../lib/types';
 
 function PeopleWorkspace() {
@@ -14,6 +15,11 @@ function PeopleWorkspace() {
   const [error, setError] = useState('');
   const [actionId, setActionId] = useState<number | null>(null);
   const [message, setMessage] = useState('');
+  const [coachEmail, setCoachEmail] = useState('');
+  const [coachName, setCoachName] = useState('');
+  const [creating, setCreating] = useState(false);
+  const [createMessage, setCreateMessage] = useState('');
+  const [createError, setCreateError] = useState('');
 
   async function load() {
     setState('loading');
@@ -58,16 +64,58 @@ function PeopleWorkspace() {
     }
   }
 
+  async function createCoach() {
+    if (creating || !coachEmail.trim() || !coachName.trim()) return;
+    setCreating(true);
+    setCreateMessage('');
+    setCreateError('');
+    try {
+      const result = await fetchJson<{ person: Person; setup_url: string }>('/api/people', {
+        method: 'POST',
+        body: JSON.stringify({ email: coachEmail.trim(), full_name: coachName.trim() })
+      });
+      setCoachEmail('');
+      setCoachName('');
+      await load();
+      setCreateMessage(`Coach ${result.person.full_name} created with ${INITIAL_CREDITS.coach.toLocaleString()} credits. A secure setup link has been emailed to ${result.person.email}.`);
+    } catch (cause) {
+      setCreateError(cause instanceof Error ? cause.message : 'Could not create the coach');
+    } finally {
+      setCreating(false);
+    }
+  }
+
   return (
     <main className="page-shell">
       <header className="title-block">
-        <div className="title-block-brand">ATRIUM COACHING CENTRE</div>
         <div className="title-block-main">
           <h1>People directory</h1>
           <div className="title-block-meta">ADMINISTRATOR / ACCOUNT MANAGEMENT</div>
         </div>
       </header>
       <p><Link className="text-link" href="/admin">← BACK TO DASHBOARD</Link></p>
+
+      <section className="data-panel" aria-labelledby="create-coach-title">
+        <div className="section-heading">
+          <div>
+            <h2 id="create-coach-title">ISSUE A COACH ACCOUNT</h2>
+            <p className="muted">New coaches start with {INITIAL_CREDITS.coach.toLocaleString()} credits. The secure setup link is emailed to the address below — it expires in 30 minutes and can only be used once.</p>
+          </div>
+        </div>
+        {createMessage && <p className="success-line" role="status">{createMessage}</p>}
+        {createError && <p className="error-line" role="alert">{createError}</p>}
+        <form className="form-grid create-coach-form" onSubmit={(event) => { event.preventDefault(); void createCoach(); }}>
+          <label>
+            <span>Full name</span>
+            <input required type="text" name="coach_name" autoComplete="off" value={coachName} onChange={(event) => setCoachName(event.target.value)} />
+          </label>
+          <label>
+            <span>Email</span>
+            <input required type="email" name="coach_email" autoComplete="off" value={coachEmail} onChange={(event) => setCoachEmail(event.target.value)} />
+          </label>
+          <button type="submit" disabled={creating || !coachEmail.trim() || !coachName.trim()}>{creating ? 'CREATING...' : 'CREATE COACH'}</button>
+        </form>
+      </section>
 
       {state === 'loading' && <p className="state-line">LOADING DIRECTORY...</p>}
       {state === 'error' && <p className="error-line">{error}</p>}

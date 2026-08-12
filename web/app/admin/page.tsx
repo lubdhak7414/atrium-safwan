@@ -47,8 +47,10 @@ function AdminWorkspace() {
 
   return (
     <main className="page-shell">
+      <header className="title-block"><div className="title-block-main"><h1>Operations dashboard</h1></div></header>
       {state === 'loading' && <p className="state-line">LOADING OPERATIONS...</p>}
       {state === 'error' && <p className="error-line">{error}</p>}
+      {state === 'error' && <button type="button" onClick={() => window.location.reload()}>TRY AGAIN</button>}
       {state === 'ready' && (
         <>
           <section className="summary-grid">

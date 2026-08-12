@@ -8,7 +8,10 @@ export default function AdminSessions() {
   return (
       <RoleGuard roles={['admin']}>
       <main className="page-shell">
-        <div className="page-actions"><Link className="button-link" href="/create">CREATE SESSION</Link></div>
+        <header className="title-block">
+          <div className="title-block-main"><h1>Session calendar</h1></div>
+          <div className="page-actions"><Link className="button-link" href="/create">CREATE SESSION</Link></div>
+        </header>
         <CalendarView role="admin" />
       </main>
     </RoleGuard>
