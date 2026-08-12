@@ -13,7 +13,7 @@ export function AccountOverview() {
         <h2 id="account-overview-title">{user || status === 'loading' ? 'YOUR ATRIUM ACCOUNT' : 'START WITH ATRIUM'}</h2>
       </div>
       {status === 'loading' ? (
-        <p className="account-loading">Loading account...</p>
+        <p className="muted">Loading account...</p>
       ) : user ? (
         <>
           <div className="credit-card account-credit">

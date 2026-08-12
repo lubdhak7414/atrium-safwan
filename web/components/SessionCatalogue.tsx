@@ -97,8 +97,9 @@ export function SessionCatalogue({
       </div>
       {state === 'loading' && <p className="state-line">LOADING SESSIONS...</p>}
       {state === 'error' && <p className="error-line">{error}</p>}
+      {state === 'error' && sourcePath && <button type="button" onClick={() => void load()}>TRY AGAIN</button>}
       {state === 'ready' && error && <p className="error-line" role="alert">{error}</p>}
-      {state === 'ready' && filtered.length === 0 && <p className="empty-line">NO SESSIONS MATCH THESE FILTERS.</p>}
+      {state === 'ready' && filtered.length === 0 && <p className="empty-line">{sessions.length === 0 ? 'No sessions in this period.' : 'NO SESSIONS MATCH THESE FILTERS.'}</p>}
       {state === 'ready' && filtered.length > 0 && (
         <div className="table-scroll">
            <table>
@@ -107,7 +108,10 @@ export function SessionCatalogue({
               const booked = Boolean(session.my_enrolment);
               const full = (session.places_remaining ?? 0) <= 0;
               return (
-                <tr key={session.id} className={onOpen ? 'clickable-row' : undefined} onClick={onOpen ? () => onOpen(session.id) : undefined}>
+                <tr key={session.id} className={onOpen ? 'clickable-row' : undefined} onClick={onOpen ? () => onOpen(session.id) : undefined}
+                    tabIndex={onOpen ? 0 : undefined}
+                    role={onOpen ? 'button' : undefined}
+                    onKeyDown={onOpen ? (event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onOpen(session.id); } } : undefined}>
                   <td><strong>{session.discipline}</strong><br /><span className="muted mono">#{session.id}</span></td>
                   <td className="mono">{session.session_type.toUpperCase()}</td>
                   <td className="mono">{formatCentreDate(session.starts_at)}<br />{formatCentreTime(session.starts_at)}–{formatCentreTime(session.ends_at)}</td>
